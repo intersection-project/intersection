@@ -1,51 +1,84 @@
-use std::{env, fs};
+mod models;
+mod schema;
 
-use dotenv::dotenv;
+use std::env;
+
+use anyhow::anyhow;
+use diesel::{
+    r2d2::{ConnectionManager, Pool},
+    ExpressionMethods, QueryDsl, RunQueryDsl, SqliteConnection,
+};
+use dotenvy::dotenv;
+use models::Guild;
 use serenity::{
     async_trait,
     model::prelude::{Activity, Message, Ready},
     prelude::*,
 };
-use sqlx::SqlitePool;
 
 struct DB;
 
 impl TypeMapKey for DB {
-    type Value = SqlitePool;
+    type Value = Pool<ConnectionManager<SqliteConnection>>;
 }
 
 struct Handler;
 
-macro_rules! message_channel_send {
-    ($ctx:ident, $msg:ident, $content:expr) => {
-        if let Err(why) = $msg.channel_id.say(&$ctx.http, $content).await {
-            println!("Error sending message: {:?}", why);
-        }
-    };
-}
+/// Function called whenever a message event is triggered. This can return an Anyhow Error
+/// which is displayed to the user.
+async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+    if msg.author.bot {
+        return Ok(());
+    }
 
-macro_rules! message_reply {
-    ($ctx:ident, $msg:ident, $content:expr) => {
-        if let Err(why) = $msg.reply(&$ctx.http, $content).await {
-            println!("Error sending message: {:?}", why);
-        }
-    };
+    let _guild = schema::guilds::table
+        .filter(
+            schema::guilds::id.eq(msg
+                .guild_id
+                .ok_or(anyhow!("msg.guild_id was None"))?
+                .to_string()),
+        )
+        .first::<Guild>(
+            &mut ctx
+                .data
+                .read()
+                .await
+                .get::<DB>()
+                .ok_or(anyhow!("DB was None"))?
+                .get()?,
+        )?;
+
+    if msg.channel(&ctx.http).await?.guild().is_none() {
+        msg.reply(&ctx.http, "This bot only works in servers.")
+            .await?;
+        return Ok(());
+    }
+
+    if msg.content == "!ping" {
+        msg.channel_id.say(&ctx.http, "Pong!").await?;
+    }
+
+    Ok(())
 }
 
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
-        if msg.author.bot {
-            return;
-        }
+        let result = handle_message(&ctx, &msg).await;
 
-        if msg.channel(&ctx.http).await.unwrap().guild().is_none() {
-            message_reply!(ctx, msg, "This bot only works in servers.");
-            return;
-        }
-
-        if msg.content == "!ping" {
-            message_channel_send!(ctx, msg, "Pong!");
+        if let Err(e) = result {
+            if let Err(e2) = msg
+                .reply(
+                    &ctx.http,
+                    format!(
+                        "An internal error occurred while processing your command: {}",
+                        e
+                    ),
+                )
+                .await
+            {
+                println!("An error occurred while handling an error. {:?}", e2);
+            }
         }
     }
 
@@ -60,10 +93,10 @@ impl EventHandler for Handler {
 async fn main() -> Result<(), anyhow::Error> {
     dotenv()?;
 
-    let conn = SqlitePool::connect("sqlite:./data.sqlite?mode=rwc").await?;
-    sqlx::query!("CREATE TABLE IF NOT EXISTS guilds (prefix TEXT);")
-        .execute()
-        .await?;
+    let database_url = env::var("DATABASE_URL").expect("Expected DATABASE_URL in the environment");
+    let pool = Pool::builder()
+        .test_on_check_out(true)
+        .build(ConnectionManager::<SqliteConnection>::new(database_url))?;
 
     let intents = GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::DIRECT_MESSAGES
@@ -78,7 +111,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     {
         let mut data = client.data.write().await;
-        data.insert::<DB>(conn);
+        data.insert::<DB>(pool);
     }
 
     client.start().await?;
