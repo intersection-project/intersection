@@ -34,9 +34,8 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    if msg.channel(&ctx.http).await?.guild().is_none() {
-        msg.reply(&ctx.http, "This bot only works in servers.")
-            .await?;
+    if msg.channel(ctx).await?.guild().is_none() {
+        msg.reply(ctx, "This bot only works in servers.").await?;
         return Ok(());
     }
 
@@ -101,14 +100,9 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
     );
 
     if command == "config" {
-        if !msg
-            .member(&ctx.http)
-            .await?
-            .permissions(&ctx.cache)? // FIXME: "guild not in the cache"??
-            .manage_guild()
-        {
+        if !msg.member(ctx).await?.permissions(ctx)?.manage_guild() {
             msg.reply(
-                &ctx.http,
+                ctx,
                 "You need the Manage Server permission to run this command!",
             )
             .await?;
@@ -119,7 +113,7 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
             Some(subcommand) => subcommand,
             None => {
                 msg.reply(
-                    &ctx.http,
+                    ctx,
                     format!(
                         "You need to specify a subcommand. Try `{}config help`",
                         prefix
@@ -132,13 +126,13 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
         .to_lowercase();
 
         if subcommand == "help" {
-            msg.reply(&ctx.http, "Available subcommands: `prefix`, `help`")
+            msg.reply(ctx, "Available subcommands: `prefix`, `help`")
                 .await?;
         } else if subcommand == "prefix" {
             todo!(); // TODO
         } else {
             msg.reply(
-                &ctx.http,
+                ctx,
                 format!("Unknown subcommand. Try `{}config help`", prefix),
             )
             .await?;
@@ -156,7 +150,7 @@ impl EventHandler for Handler {
         if let Err(e) = result {
             if let Err(e2) = msg
                 .reply(
-                    &ctx.http,
+                    ctx,
                     format!(
                         "An internal error occurred while processing your command: {}",
                         e
@@ -185,9 +179,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .test_on_check_out(true)
         .build(ConnectionManager::<SqliteConnection>::new(database_url))?;
 
-    let intents = GatewayIntents::GUILD_MESSAGES
-        | GatewayIntents::DIRECT_MESSAGES
-        | GatewayIntents::MESSAGE_CONTENT;
+    let intents = GatewayIntents::all();
 
     let mut client = Client::builder(
         env::var("TOKEN").expect("Expected a token in the environment"),
