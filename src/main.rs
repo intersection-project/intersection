@@ -96,7 +96,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             .to_lowercase();
 
             if action == "set" {
-                if args.len() < 1 {
+                if args.is_empty() {
                     msg.reply(
                         ctx,
                         format!(
