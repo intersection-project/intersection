@@ -6,7 +6,8 @@ use std::env;
 use anyhow::anyhow;
 use diesel::{
     r2d2::{ConnectionManager, Pool},
-    ExpressionMethods, QueryDsl, RunQueryDsl, SqliteConnection,
+    result::Error::NotFound,
+    ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection,
 };
 use dotenvy::dotenv;
 use models::Guild;
@@ -15,6 +16,8 @@ use serenity::{
     model::prelude::{Activity, Message, Ready},
     prelude::*,
 };
+
+use crate::models::NewGuild;
 
 struct DB;
 
@@ -31,28 +34,58 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let _guild = schema::guilds::table
+    if msg.channel(&ctx.http).await?.guild().is_none() {
+        msg.reply(&ctx.http, "This bot only works in servers.")
+            .await?;
+        return Ok(());
+    }
+
+    let mut conn = ctx
+        .data
+        .write()
+        .await
+        .get::<DB>()
+        .ok_or(anyhow!("DB was None"))?
+        .get()?;
+
+    let guild = match schema::guilds::table
         .filter(
             schema::guilds::id.eq(msg
                 .guild_id
                 .ok_or(anyhow!("msg.guild_id was None"))?
                 .to_string()),
         )
-        .first::<Guild>(
-            &mut ctx
-                .data
-                .read()
-                .await
-                .get::<DB>()
-                .ok_or(anyhow!("DB was None"))?
-                .get()?,
-        )?;
+        .first::<Guild>(&mut conn)
+    {
+        Ok(guild) => guild,
+        Err(NotFound) => {
+            let new_guild = NewGuild {
+                id: msg
+                    .guild_id
+                    .ok_or(anyhow!("msg.guild_id was None"))?
+                    .to_string()
+                    .as_str(),
+                prefix: None,
+            };
 
-    if msg.channel(&ctx.http).await?.guild().is_none() {
-        msg.reply(&ctx.http, "This bot only works in servers.")
-            .await?;
-        return Ok(());
-    }
+            diesel::insert_into(schema::guilds::table)
+                .values(&new_guild)
+                .execute(&mut conn)?;
+
+            new_guild.into()
+        }
+        Err(e) => return Err(e.into()),
+    };
+
+    let mut args = msg.content[guild.prefix.unwrap_or("+".to_string()).len()..]
+        .trim()
+        .split_whitespace()
+        .collect::<Vec<_>>();
+    args.rotate_left(1);
+    let command = args.pop();
+
+    // for debugging:
+    println!("+{}, {}", command.unwrap_or("None"), args.join(", "));
 
     if msg.content == "!ping" {
         msg.channel_id.say(&ctx.http, "Pong!").await?;
