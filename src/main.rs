@@ -153,7 +153,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
 }
 
 /// Obtain a [Guild] instance
-async fn obtain_guild(ctx: &Context, msg: &Message) -> anyhow::Result<Guild> {
+async fn obtain_guild(ctx: &Context, guild_id: &str) -> anyhow::Result<Guild> {
     use schema::guilds::dsl::*;
 
     let mut conn = ctx
@@ -165,23 +165,11 @@ async fn obtain_guild(ctx: &Context, msg: &Message) -> anyhow::Result<Guild> {
         .get()?;
 
     Ok(
-        match guilds
-            .filter(
-                id.eq(msg
-                    .guild_id
-                    .ok_or(anyhow!("msg.guild_id was None"))?
-                    .to_string()),
-            )
-            .first::<Guild>(&mut conn)
-        {
+        match guilds.filter(id.eq(guild_id)).first::<Guild>(&mut conn) {
             Ok(guild) => guild,
             Err(NotFound) => {
-                let id_string = msg
-                    .guild_id
-                    .ok_or(anyhow!("msg.guild_id was None"))?
-                    .to_string();
                 let new_guild = NewGuild {
-                    id: id_string.as_str(),
+                    id: guild_id,
                     prefix: None,
                 };
 
@@ -190,9 +178,7 @@ async fn obtain_guild(ctx: &Context, msg: &Message) -> anyhow::Result<Guild> {
                     .execute(&mut conn)?;
 
                 // Re-do the query now that we have inserted
-                guilds
-                    .filter(id.eq(id_string.as_str()))
-                    .first::<Guild>(&mut conn)?
+                guilds.filter(id.eq(guild_id)).first::<Guild>(&mut conn)?
             }
             Err(e) => return Err(e.into()),
         },
@@ -211,7 +197,14 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
     }
 
     // Get this Guild from the database
-    let guild = obtain_guild(ctx, msg).await?;
+    let guild = obtain_guild(
+        ctx,
+        msg.guild_id
+            .ok_or(anyhow!("msg.guild_id was None"))?
+            .to_string()
+            .as_str(),
+    )
+    .await?;
 
     // TODO: Guide the user if they mention the bot instead of a prefix
 
