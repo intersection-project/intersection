@@ -183,7 +183,7 @@ async fn obtain_guild(ctx: &Context, msg: &Message) -> anyhow::Result<Guild> {
                     prefix: None,
                 };
 
-                diesel::insert_into(schema::guilds::table)
+                diesel::insert_into(guilds)
                     .values(&new_guild)
                     .execute(&mut conn)?;
 
