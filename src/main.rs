@@ -45,14 +45,6 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
         mut args,
     } = data;
 
-    let mut conn = ctx
-        .data
-        .read()
-        .await
-        .get::<DB>()
-        .ok_or(anyhow!("DB was None"))?
-        .get()?;
-
     let prefix = guild.prefix.unwrap_or("+".to_string());
 
     if command == "config" {
@@ -109,6 +101,15 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 }
 
                 let new_prefix = args.make_contiguous().join(" ");
+
+                // Obtain a connection to the database
+                let mut conn = ctx
+                    .data
+                    .read()
+                    .await
+                    .get::<DB>()
+                    .ok_or(anyhow!("DB was None"))?
+                    .get()?;
 
                 diesel::update(schema::guilds::table)
                     .filter(
