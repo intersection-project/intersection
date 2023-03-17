@@ -1,7 +1,7 @@
 mod models;
 mod schema;
 
-use std::env;
+use std::{collections::VecDeque, env};
 
 use anyhow::anyhow;
 use diesel::{
@@ -27,78 +27,33 @@ impl TypeMapKey for DB {
 
 struct Handler;
 
-/// Function called whenever a message event is triggered. This can return an Anyhow Error
-/// which is displayed to the user.
-async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
-    if msg.author.bot {
-        return Ok(());
-    }
+struct CommandExecution<'a> {
+    ctx: &'a Context,
+    msg: &'a Message,
+    guild: Guild,
+    command: &'a str,
+    args: VecDeque<&'a str>,
+}
 
-    if msg.channel(ctx).await?.guild().is_none() {
-        msg.reply(ctx, "This bot only works in servers.").await?;
-        return Ok(());
-    }
+/// Function called whenever a **message-based command** is triggered.
+async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
+    let CommandExecution {
+        ctx,
+        msg,
+        guild,
+        command,
+        mut args,
+    } = data;
 
     let mut conn = ctx
         .data
-        .write()
+        .read()
         .await
         .get::<DB>()
         .ok_or(anyhow!("DB was None"))?
         .get()?;
 
-    let guild = match schema::guilds::table
-        .filter(
-            schema::guilds::id.eq(msg
-                .guild_id
-                .ok_or(anyhow!("msg.guild_id was None"))?
-                .to_string()),
-        )
-        .first::<Guild>(&mut conn)
-    {
-        Ok(guild) => guild,
-        Err(NotFound) => {
-            let id_string = msg
-                .guild_id
-                .ok_or(anyhow!("msg.guild_id was None"))?
-                .to_string();
-            let new_guild = NewGuild {
-                id: id_string.as_str(),
-                prefix: None,
-            };
-
-            diesel::insert_into(schema::guilds::table)
-                .values(&new_guild)
-                .execute(&mut conn)?;
-
-            new_guild.into()
-        }
-        Err(e) => return Err(e.into()),
-    };
-
     let prefix = guild.prefix.unwrap_or("+".to_string());
-
-    if (!msg.content.starts_with(&prefix)) && (!msg.content.starts_with("<@!")) {
-        return Ok(());
-    }
-
-    let mut args = msg.content[prefix.len()..]
-        .split_whitespace()
-        .collect::<Vec<_>>();
-
-    args.rotate_left(1);
-    let command = match args.pop() {
-        Some(command) => command,
-        None => return Ok(()),
-    };
-
-    println!(
-        "Command {} run by {} ({}) with args \"{}\"",
-        command,
-        msg.author.tag(),
-        msg.author.id,
-        args.join(" ")
-    );
 
     if command == "config" {
         if !msg.member(ctx).await?.permissions(ctx)?.manage_guild() {
@@ -110,8 +65,7 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
             return Ok(());
         }
 
-        args.rotate_left(1);
-        let subcommand = match args.pop() {
+        let subcommand = match args.pop_front() {
             Some(subcommand) => subcommand,
             None => {
                 msg.reply(
@@ -131,8 +85,7 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
             msg.reply(ctx, "Available subcommands: `prefix`, `help`")
                 .await?;
         } else if subcommand == "prefix" {
-            args.rotate_left(1);
-            let action = match args.pop() {
+            let action = match args.pop_front() {
                 Some(action) => action,
                 None => {
                     msg.reply(ctx, "Specify an action verb, `get` or `set`.")
@@ -155,7 +108,7 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
                     return Ok(());
                 }
 
-                let new_prefix = args.join(" ");
+                let new_prefix = args.make_contiguous().join(" ");
 
                 diesel::update(schema::guilds::table)
                     .filter(
@@ -195,6 +148,99 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// Obtain a [Guild] instance
+async fn obtain_guild(ctx: &Context, msg: &Message) -> anyhow::Result<Guild> {
+    use schema::guilds::dsl::*;
+
+    let mut conn = ctx
+        .data
+        .read()
+        .await
+        .get::<DB>()
+        .ok_or(anyhow!("DB was None"))?
+        .get()?;
+
+    Ok(
+        match guilds
+            .filter(
+                id.eq(msg
+                    .guild_id
+                    .ok_or(anyhow!("msg.guild_id was None"))?
+                    .to_string()),
+            )
+            .first::<Guild>(&mut conn)
+        {
+            Ok(guild) => guild,
+            Err(NotFound) => {
+                let id_string = msg
+                    .guild_id
+                    .ok_or(anyhow!("msg.guild_id was None"))?
+                    .to_string();
+                let new_guild = NewGuild {
+                    id: id_string.as_str(),
+                    prefix: None,
+                };
+
+                diesel::insert_into(schema::guilds::table)
+                    .values(&new_guild)
+                    .execute(&mut conn)?;
+
+                new_guild.into()
+            }
+            Err(e) => return Err(e.into()),
+        },
+    )
+}
+
+/// Function called on every message.
+async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+    if msg.author.bot {
+        return Ok(());
+    }
+
+    if msg.channel(ctx).await?.guild().is_none() {
+        msg.reply(ctx, "This bot only works in servers.").await?;
+        return Ok(());
+    }
+
+    // Get this Guild from the database
+    let guild = obtain_guild(ctx, msg).await?;
+
+    let prefix = guild.prefix.clone().unwrap_or("+".to_string());
+
+    // TODO: Guide the user if they mention the bot instead of a prefix
+
+    if !msg.content.starts_with(&prefix) {
+        return Ok(());
+    }
+
+    let mut args = msg.content[prefix.len()..]
+        .split_whitespace()
+        .collect::<VecDeque<_>>();
+
+    let command = match args.pop_front() {
+        Some(command) => command,
+        None => return Ok(()),
+    };
+
+    println!(
+        "Command {} run by {} ({}) with args \"{}\"",
+        command,
+        msg.author.tag(),
+        msg.author.id,
+        args.make_contiguous().join(" ")
+    );
+
+    handle_command(CommandExecution {
+        ctx,
+        msg,
+        guild,
+        command,
+        args,
+    })
+    .await
 }
 
 #[async_trait]
