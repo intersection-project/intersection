@@ -3,6 +3,6 @@
 diesel::table! {
     guilds (id) {
         id -> Text,
-        prefix -> Nullable<Text>,
+        prefix -> Text,
     }
 }
