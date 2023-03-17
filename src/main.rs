@@ -45,8 +45,6 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
         mut args,
     } = data;
 
-    let prefix = guild.prefix.unwrap_or("+".to_string());
-
     if command == "config" {
         if !msg.member(ctx).await?.permissions(ctx)?.manage_guild() {
             msg.reply(
@@ -64,7 +62,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                     ctx,
                     format!(
                         "You need to specify a subcommand. Try `{}config help`",
-                        prefix
+                        guild.prefix
                     ),
                 )
                 .await?;
@@ -93,7 +91,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                         ctx,
                         format!(
                             "You need to specify a prefix. Try `{}config prefix set <prefix>`",
-                            prefix
+                            guild.prefix
                         ),
                     )
                     .await?;
@@ -127,14 +125,17 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 )
                 .await?;
             } else if action == "get" {
-                msg.reply(ctx, format!("This server's prefix is set to `{}`.", prefix))
-                    .await?;
+                msg.reply(
+                    ctx,
+                    format!("This server's prefix is set to `{}`.", guild.prefix),
+                )
+                .await?;
             } else {
                 msg.reply(
                     ctx,
                     format!(
                         "Unknown action verb. Try `{}config prefix get` or `{}config prefix set`.",
-                        prefix, prefix
+                        guild.prefix, guild.prefix
                     ),
                 )
                 .await?;
@@ -142,7 +143,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
         } else {
             msg.reply(
                 ctx,
-                format!("Unknown subcommand. Try `{}config help`", prefix),
+                format!("Unknown subcommand. Try `{}config help`", guild.prefix),
             )
             .await?;
         }
@@ -188,7 +189,10 @@ async fn obtain_guild(ctx: &Context, msg: &Message) -> anyhow::Result<Guild> {
                     .values(&new_guild)
                     .execute(&mut conn)?;
 
-                new_guild.into()
+                // Re-do the query now that we have inserted
+                guilds
+                    .filter(id.eq(id_string.as_str()))
+                    .first::<Guild>(&mut conn)?
             }
             Err(e) => return Err(e.into()),
         },
@@ -209,15 +213,13 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
     // Get this Guild from the database
     let guild = obtain_guild(ctx, msg).await?;
 
-    let prefix = guild.prefix.clone().unwrap_or("+".to_string());
-
     // TODO: Guide the user if they mention the bot instead of a prefix
 
-    if !msg.content.starts_with(&prefix) {
+    if !msg.content.starts_with(&guild.prefix) {
         return Ok(());
     }
 
-    let mut args = msg.content[prefix.len()..]
+    let mut args = msg.content[guild.prefix.len()..]
         .split_whitespace()
         .collect::<VecDeque<_>>();
 
