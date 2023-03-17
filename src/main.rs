@@ -7,7 +7,7 @@ use anyhow::anyhow;
 use diesel::{
     r2d2::{ConnectionManager, Pool},
     result::Error::NotFound,
-    ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection,
+    ExpressionMethods, QueryDsl, RunQueryDsl, SqliteConnection,
 };
 use dotenvy::dotenv;
 use models::Guild;
@@ -59,12 +59,12 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
     {
         Ok(guild) => guild,
         Err(NotFound) => {
+            let id_string = msg
+                .guild_id
+                .ok_or(anyhow!("msg.guild_id was None"))?
+                .to_string();
             let new_guild = NewGuild {
-                id: msg
-                    .guild_id
-                    .ok_or(anyhow!("msg.guild_id was None"))?
-                    .to_string()
-                    .as_str(),
+                id: id_string.as_str(),
                 prefix: None,
             };
 
@@ -77,18 +77,73 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
         Err(e) => return Err(e.into()),
     };
 
-    let mut args = msg.content[guild.prefix.unwrap_or("+".to_string()).len()..]
+    let prefix = guild.prefix.unwrap_or("+".to_string());
+
+    if (!msg.content.starts_with(&prefix)) && (!msg.content.starts_with("<@!")) {
+        return Ok(());
+    }
+
+    let mut args = msg.content[prefix.len()..]
         .trim()
         .split_whitespace()
         .collect::<Vec<_>>();
     args.rotate_left(1);
-    let command = args.pop();
+    let command = match args.pop() {
+        Some(command) => command,
+        None => return Ok(()),
+    };
 
-    // for debugging:
-    println!("+{}, {}", command.unwrap_or("None"), args.join(", "));
+    println!(
+        "Command {} run by {} ({}) with args \"{}\"",
+        command,
+        msg.author.tag(),
+        msg.author.id,
+        args.join(" ")
+    );
 
-    if msg.content == "!ping" {
-        msg.channel_id.say(&ctx.http, "Pong!").await?;
+    if command == "config" {
+        if !msg
+            .member(&ctx.http)
+            .await?
+            .permissions(&ctx.cache)? // FIXME: "guild not in the cache"??
+            .manage_guild()
+        {
+            msg.reply(
+                &ctx.http,
+                "You need the Manage Server permission to run this command!",
+            )
+            .await?;
+            return Ok(());
+        }
+
+        let subcommand = match args.pop() {
+            Some(subcommand) => subcommand,
+            None => {
+                msg.reply(
+                    &ctx.http,
+                    format!(
+                        "You need to specify a subcommand. Try `{}config help`",
+                        prefix
+                    ),
+                )
+                .await?;
+                return Ok(());
+            }
+        }
+        .to_lowercase();
+
+        if subcommand == "help" {
+            msg.reply(&ctx.http, "Available subcommands: `prefix`, `help`")
+                .await?;
+        } else if subcommand == "prefix" {
+            todo!(); // TODO
+        } else {
+            msg.reply(
+                &ctx.http,
+                format!("Unknown subcommand. Try `{}config help`", prefix),
+            )
+            .await?;
+        }
     }
 
     Ok(())
