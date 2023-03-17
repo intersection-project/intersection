@@ -84,7 +84,6 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
     }
 
     let mut args = msg.content[prefix.len()..]
-        .trim()
         .split_whitespace()
         .collect::<Vec<_>>();
     args.rotate_left(1);

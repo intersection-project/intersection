@@ -14,11 +14,11 @@ pub struct NewGuild<'a> {
     pub prefix: Option<&'a str>,
 }
 
-impl<'a> Into<Guild> for NewGuild<'a> {
-    fn into(self) -> Guild {
+impl<'a> From<NewGuild<'a>> for Guild {
+    fn from(val: NewGuild<'a>) -> Self {
         Guild {
-            id: self.id.to_string(),
-            prefix: self.prefix.map(|s| s.to_string()),
+            id: val.id.to_string(),
+            prefix: val.prefix.map(|s| s.to_string()),
         }
     }
 }
