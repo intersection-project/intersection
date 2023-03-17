@@ -85,6 +85,7 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
     let mut args = msg.content[prefix.len()..]
         .split_whitespace()
         .collect::<Vec<_>>();
+
     args.rotate_left(1);
     let command = match args.pop() {
         Some(command) => command,
@@ -109,6 +110,7 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
             return Ok(());
         }
 
+        args.rotate_left(1);
         let subcommand = match args.pop() {
             Some(subcommand) => subcommand,
             None => {
@@ -129,7 +131,60 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
             msg.reply(ctx, "Available subcommands: `prefix`, `help`")
                 .await?;
         } else if subcommand == "prefix" {
-            todo!(); // TODO
+            args.rotate_left(1);
+            let action = match args.pop() {
+                Some(action) => action,
+                None => {
+                    msg.reply(ctx, "Specify an action verb, `get` or `set`.")
+                        .await?;
+                    return Ok(());
+                }
+            }
+            .to_lowercase();
+
+            if action == "set" {
+                if args.len() < 1 {
+                    msg.reply(
+                        ctx,
+                        format!(
+                            "You need to specify a prefix. Try `{}config prefix set <prefix>`",
+                            prefix
+                        ),
+                    )
+                    .await?;
+                    return Ok(());
+                }
+
+                let new_prefix = args.join(" ");
+
+                diesel::update(schema::guilds::table)
+                    .filter(
+                        schema::guilds::id.eq(msg
+                            .guild_id
+                            .ok_or(anyhow!("msg.guild_id was None"))?
+                            .to_string()),
+                    )
+                    .set(schema::guilds::prefix.eq(new_prefix.as_str()))
+                    .execute(&mut conn)?;
+
+                msg.reply(
+                    ctx,
+                    format!("This server's prefix has been set to `{}`.", new_prefix),
+                )
+                .await?;
+            } else if action == "get" {
+                msg.reply(ctx, format!("This server's prefix is set to `{}`.", prefix))
+                    .await?;
+            } else {
+                msg.reply(
+                    ctx,
+                    format!(
+                        "Unknown action verb. Try `{}config prefix get` or `{}config prefix set`.",
+                        prefix, prefix
+                    ),
+                )
+                .await?;
+            }
         } else {
             msg.reply(
                 ctx,
