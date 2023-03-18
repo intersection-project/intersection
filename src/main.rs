@@ -1,3 +1,4 @@
+mod drql;
 mod models;
 mod schema;
 
@@ -147,6 +148,19 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             )
             .await?;
         }
+    } else if command == "scan" {
+        msg.reply(
+            ctx,
+            format!(
+                "Scanner chunks:\n{}",
+                drql::scanner::scan(args.make_contiguous().join(" ").as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ),
+        )
+        .await?;
+    } else {
+        msg.reply(ctx, "Unknown command.").await?;
     }
 
     Ok(())
