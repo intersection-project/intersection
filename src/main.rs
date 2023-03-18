@@ -159,6 +159,23 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             ),
         )
         .await?;
+    } else if command == "lex" {
+        msg.reply(
+            ctx,
+            format!(
+                "Lexed chunks:\n{}",
+                drql::scanner::scan(args.make_contiguous().join(" ").as_str())
+                    .map(|chunk| drql::lexer::DrqlLexer::new(chunk)
+                        .map(|token| format!("{:?}", token))
+                        .collect::<Vec<_>>()
+                        .join("\n"))
+                    .enumerate()
+                    .map(|(index, members)| format!("Chunk {}:\n{}", index, members))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ),
+        )
+        .await?;
     } else {
         msg.reply(ctx, "Unknown command.").await?;
     }
