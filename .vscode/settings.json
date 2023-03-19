@@ -1,3 +1,11 @@
 {
-    "cSpell.words": ["Deque", "dotenv", "dotenvy", "DRQL", "Insertable", "sqlx"]
+    "cSpell.words": [
+        "Deque",
+        "dotenv",
+        "dotenvy",
+        "DRQL",
+        "Insertable",
+        "lalrpop",
+        "sqlx"
+    ]
 }

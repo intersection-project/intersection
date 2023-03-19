@@ -2,6 +2,15 @@ mod drql;
 mod models;
 mod schema;
 
+#[macro_use]
+extern crate lalrpop_util;
+
+lalrpop_mod!(
+    /// Direct access to the DRQL LALRPOP parser. Prefer to use the functions exported by drql::parser instead.
+    #[allow(clippy::all)]
+    parser
+);
+
 use std::{collections::VecDeque, env};
 
 use anyhow::anyhow;

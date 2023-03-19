@@ -1,0 +1,49 @@
+// Do not import and use this file directly. Use the API provided by drql::parser instead.
+
+use crate::drql::ast;
+use crate::drql::lexer;
+use lalrpop_util::ErrorRecovery;
+
+grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, lexer::Tok, lexer::LexicalError>>);
+
+pub Expr: ast::Expr = {
+    <left:Expr> "+" <right:Primary> => ast::Expr::Union(Box::new(left), Box::new(right)),
+    <left:Expr> "-" <right:Primary> => ast::Expr::Difference(Box::new(left), Box::new(right)),
+    <left:Expr> "&" <right:Primary> => ast::Expr::Intersection(Box::new(left), Box::new(right)),
+    <left:Expr> "|" <right:Primary> => ast::Expr::Union(Box::new(left), Box::new(right)),
+    <Primary>,
+};
+
+Primary: ast::Expr = {
+    <STRING_LITERAL> => ast::Expr::StringLiteral(<>),
+    <RAW_NAME> => ast::Expr::StringLiteral(<>),
+    <ID_LITERAL> => ast::Expr::UnknownID(<>),
+    <USER_MENTION> => ast::Expr::UserID(<>),
+    <ROLE_MENTION> => ast::Expr::RoleID(<>),
+    "@everyone" => ast::Expr::Everyone,
+    "@here" => ast::Expr::Here,
+    "(" <Expr> ")",
+};
+
+extern {
+    type Location = usize;
+    type Error = lexer::LexicalError;
+
+    enum lexer::Tok {
+        "+" => lexer::Tok::Plus,
+        "-" => lexer::Tok::Minus,
+        "|" => lexer::Tok::Pipe,
+        "&" => lexer::Tok::Ampersand,
+        "(" => lexer::Tok::LeftParen,
+        ")" => lexer::Tok::RightParen,
+
+        "@everyone" => lexer::Tok::Everyone,
+        "@here" => lexer::Tok::Here,
+
+        STRING_LITERAL => lexer::Tok::StringLiteral(<String>),
+        ID_LITERAL => lexer::Tok::IDLiteral(<String>),
+        USER_MENTION => lexer::Tok::UserMention(<String>),
+        ROLE_MENTION => lexer::Tok::RoleMention(<String>),
+        RAW_NAME => lexer::Tok::RawName(<String>),
+    }
+}
