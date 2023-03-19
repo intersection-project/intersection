@@ -20,8 +20,6 @@ Primary: ast::Expr = {
     <ID_LITERAL> => ast::Expr::UnknownID(<>),
     <USER_MENTION> => ast::Expr::UserID(<>),
     <ROLE_MENTION> => ast::Expr::RoleID(<>),
-    "@everyone" => ast::Expr::Everyone,
-    "@here" => ast::Expr::Here,
     "(" <Expr> ")",
 };
 
@@ -36,9 +34,6 @@ extern {
         "&" => lexer::Tok::Ampersand,
         "(" => lexer::Tok::LeftParen,
         ")" => lexer::Tok::RightParen,
-
-        "@everyone" => lexer::Tok::Everyone,
-        "@here" => lexer::Tok::Here,
 
         STRING_LITERAL => lexer::Tok::StringLiteral(<String>),
         ID_LITERAL => lexer::Tok::IDLiteral(<String>),

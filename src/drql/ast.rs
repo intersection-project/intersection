@@ -8,6 +8,4 @@ pub enum Expr {
     UnknownID(String),
     UserID(String),
     RoleID(String),
-    Everyone,
-    Here,
 }

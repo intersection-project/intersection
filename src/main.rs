@@ -20,6 +20,7 @@ use diesel::{
     ExpressionMethods, QueryDsl, RunQueryDsl, SqliteConnection,
 };
 use dotenvy::dotenv;
+use drql::ast;
 use models::Guild;
 use serenity::{
     async_trait,
@@ -43,6 +44,11 @@ struct CommandExecution<'a> {
     guild: Guild,
     command: &'a str,
     args: VecDeque<&'a str>,
+}
+
+/// Function to fold an iterator of ASTs into one large union expression
+fn reduce_ast_chunks(iter: impl Iterator<Item = ast::Expr>) -> Option<ast::Expr> {
+    iter.reduce(|acc, chunk| ast::Expr::Union(Box::new(acc), Box::new(chunk)))
 }
 
 /// Function called whenever a **message-based command** is triggered.
@@ -182,6 +188,32 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                     .map(|(index, members)| format!("Chunk {}:\n{}", index, members))
                     .collect::<Vec<_>>()
                     .join("\n")
+            ),
+        )
+        .await?;
+    } else if command == "parse" {
+        msg.reply(
+            ctx,
+            format!(
+                "Parsed chunks:\n{}",
+                drql::scanner::scan(args.make_contiguous().join(" ").as_str())
+                    .map(|chunk| format!("{:#?}", drql::parser::parse_drql(chunk).unwrap()))
+                    .enumerate()
+                    .map(|(index, members)| format!("Chunk {}:\n```{}```", index, members))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ),
+        )
+        .await?;
+    } else if command == "parse_reduce" {
+        msg.reply(
+            ctx,
+            format!(
+                "Parsed & folded chunks into...\n```{:#?}```",
+                reduce_ast_chunks(
+                    drql::scanner::scan(args.make_contiguous().join(" ").as_str())
+                        .map(|chunk| drql::parser::parse_drql(chunk).unwrap())
+                )
             ),
         )
         .await?;

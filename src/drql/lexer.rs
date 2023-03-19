@@ -59,12 +59,6 @@ pub enum Tok {
     #[regex(r"<@&[0-9]+>", |lex| lex.slice()[3..(lex.slice().len()-1)].to_string())]
     RoleMention(String),
 
-    /// Special mentions
-    #[token("@everyone")]
-    Everyone,
-    #[token("@here")]
-    Here,
-
     /// Raw names
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
     RawName(String),
@@ -140,7 +134,7 @@ mod tests {
 
     #[test]
     fn lexer_token_slices() {
-        let lexer = DrqlLexer::new("abc + \"def\" + <@123> + 456 + <@&789> + <@!111> + @here");
+        let lexer = DrqlLexer::new("abc + \"def\" + <@123> + 456 + <@&789> + <@!111>");
         let tokens: Vec<_> = lexer.map(|x| x.unwrap().1).collect();
         assert_eq!(
             tokens,
@@ -156,8 +150,6 @@ mod tests {
                 Tok::RoleMention("789".to_string()),
                 Tok::Plus,
                 Tok::UserMention("111".to_string()),
-                Tok::Plus,
-                Tok::Here,
             ]
         );
     }

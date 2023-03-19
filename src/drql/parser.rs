@@ -41,30 +41,22 @@ mod tests {
                 "  + <@!2>\n",
                 "  + <@&3>\n",
                 "  + 4\n",
-                "  + @everyone\n",
-                "  + @here\n"
             )),
             Ok(Expr::Union(
                 Box::new(Expr::Union(
                     Box::new(Expr::Union(
                         Box::new(Expr::Union(
                             Box::new(Expr::Union(
-                                Box::new(Expr::Union(
-                                    Box::new(Expr::Union(
-                                        Box::new(Expr::StringLiteral("raw_name".to_string())),
-                                        Box::new(Expr::StringLiteral("string literal".to_string()))
-                                    )),
-                                    Box::new(Expr::UserID("1".to_string()))
-                                )),
-                                Box::new(Expr::UserID("2".to_string()))
+                                Box::new(Expr::StringLiteral("raw_name".to_string())),
+                                Box::new(Expr::StringLiteral("string literal".to_string()))
                             )),
-                            Box::new(Expr::RoleID("3".to_string()))
+                            Box::new(Expr::UserID("1".to_string()))
                         )),
-                        Box::new(Expr::UnknownID("4".to_string()))
+                        Box::new(Expr::UserID("2".to_string()))
                     )),
-                    Box::new(Expr::Everyone)
+                    Box::new(Expr::RoleID("3".to_string()))
                 )),
-                Box::new(Expr::Here)
+                Box::new(Expr::UnknownID("4".to_string()))
             ))
         );
     }
