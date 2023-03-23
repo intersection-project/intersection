@@ -266,17 +266,23 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 }
                 Expr::StringLiteral(s) => {
                     let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
-                    let possible_role = guild.role_by_name(s.as_str());
-                    if let Some(role) = possible_role {
+                    if let Some((_, role)) = guild
+                        .roles
+                        .iter()
+                        .find(|(_, value)| value.name.to_lowercase() == s.to_lowercase())
+                    {
                         Expr::RoleID(role.id.to_string())
                     } else {
-                        let possible_member = guild.member_named(s.as_str());
-                        if let Some(member) = possible_member {
+                        if let Some((_, member)) = guild
+                            .members
+                            .iter()
+                            .find(|(_, value)| value.user.name.to_lowercase() == s.to_lowercase())
+                        {
                             Expr::UserID(member.user.id.to_string())
                         } else {
                             anyhow::bail!(
                                 // TODO: make not case sensitive
-                                "Unable to resolve role or member name (case sensitive!): {}",
+                                "Unable to resolve role or member **username** (use a tag and no nickname!): {}",
                                 s
                             );
                         }
