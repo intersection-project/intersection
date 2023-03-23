@@ -197,7 +197,10 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             format!(
                 "Parsed chunks:\n{}",
                 drql::scanner::scan(args.make_contiguous().join(" ").as_str())
-                    .map(|chunk| format!("{:#?}", drql::parser::parse_drql(chunk).unwrap()))
+                    .map(|chunk| drql::parser::parse_drql(chunk))
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_iter()
+                    .map(|chunk| format!("{:#?}", chunk))
                     .enumerate()
                     .map(|(index, members)| format!("Chunk {}:\n```{}```", index, members))
                     .collect::<Vec<_>>()
@@ -212,7 +215,9 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 "Parsed & folded chunks into...\n```{:#?}```",
                 reduce_ast_chunks(
                     drql::scanner::scan(args.make_contiguous().join(" ").as_str())
-                        .map(|chunk| drql::parser::parse_drql(chunk).unwrap())
+                        .map(|chunk| drql::parser::parse_drql(chunk))
+                        .collect::<Result<Vec<_>, _>>()?
+                        .into_iter()
                 )
             ),
         )

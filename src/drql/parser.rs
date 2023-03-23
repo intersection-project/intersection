@@ -1,3 +1,6 @@
+use std::fmt::Debug;
+use std::fmt::Display;
+
 use super::ast;
 use super::lexer;
 use crate::parser;
@@ -13,6 +16,22 @@ pub enum DrqlParserError<T> {
     /// An error that stopped the parser.
     Fatal(ParseError<usize, lexer::Tok, lexer::LexicalError>),
 }
+
+impl<T> Display for DrqlParserError<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DrqlParserError::Recoverable { errors, .. } => {
+                for error in errors {
+                    writeln!(f, "{:?}", error)?;
+                }
+                Ok(())
+            }
+            DrqlParserError::Fatal(e) => write!(f, "{:?}", e),
+        }
+    }
+}
+
+impl<T> std::error::Error for DrqlParserError<T> where T: Debug {}
 
 /// Parse a DRQL expression with the DRQL parser.
 pub fn parse_drql(input: &str) -> Result<ast::Expr, DrqlParserError<ast::Expr>> {
