@@ -162,65 +162,6 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             )
             .await?;
         }
-    } else if command == "scan" {
-        msg.reply(
-            ctx,
-            format!(
-                "Scanner chunks:\n{}",
-                drql::scanner::scan(args.make_contiguous().join(" ").as_str())
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            ),
-        )
-        .await?;
-    } else if command == "lex" {
-        msg.reply(
-            ctx,
-            format!(
-                "Lexed chunks:\n{}",
-                drql::scanner::scan(args.make_contiguous().join(" ").as_str())
-                    .map(|chunk| drql::lexer::DrqlLexer::new(chunk)
-                        .map(|token| format!("{:?}", token))
-                        .collect::<Vec<_>>()
-                        .join("\n"))
-                    .enumerate()
-                    .map(|(index, members)| format!("Chunk {}:\n{}", index, members))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            ),
-        )
-        .await?;
-    } else if command == "parse" {
-        msg.reply(
-            ctx,
-            format!(
-                "Parsed chunks:\n{}",
-                drql::scanner::scan(args.make_contiguous().join(" ").as_str())
-                    .map(drql::parser::parse_drql)
-                    .collect::<Result<Vec<_>, _>>()?
-                    .into_iter()
-                    .map(|chunk| format!("{:#?}", chunk))
-                    .enumerate()
-                    .map(|(index, members)| format!("Chunk {}:\n```{}```", index, members))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            ),
-        )
-        .await?;
-    } else if command == "parse_reduce" {
-        msg.reply(
-            ctx,
-            format!(
-                "Parsed & folded chunks into...\n```{:#?}```",
-                reduce_ast_chunks(
-                    drql::scanner::scan(args.make_contiguous().join(" ").as_str())
-                        .map(drql::parser::parse_drql)
-                        .collect::<Result<Vec<_>, _>>()?
-                        .into_iter()
-                )
-            ),
-        )
-        .await?;
     } else if command == "resolve" {
         let Some(ast) = reduce_ast_chunks(
             drql::scanner::scan(args.make_contiguous().join(" ").as_str())
