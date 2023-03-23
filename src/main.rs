@@ -14,6 +14,7 @@ lalrpop_mod!(
 use std::{collections::VecDeque, env};
 
 use anyhow::anyhow;
+use async_recursion::async_recursion;
 use diesel::{
     r2d2::{ConnectionManager, Pool},
     result::Error::NotFound,
@@ -24,11 +25,11 @@ use drql::ast;
 use models::Guild;
 use serenity::{
     async_trait,
-    model::prelude::{Activity, Message, Ready},
+    model::prelude::{Activity, Message, Ready, RoleId},
     prelude::*,
 };
 
-use crate::models::NewGuild;
+use crate::{drql::ast::Expr, models::NewGuild};
 
 struct DB;
 
@@ -222,6 +223,75 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             ),
         )
         .await?;
+    } else if command == "resolve" {
+        let Some(ast) = reduce_ast_chunks(
+            drql::scanner::scan(args.make_contiguous().join(" ").as_str())
+                .map(|chunk| drql::parser::parse_drql(chunk))
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter(),
+        ) else {
+            msg.reply(ctx, "Your message does not contain any DRQL queries to attempt to resolve").await?;
+            return Ok(());
+        };
+        #[async_recursion]
+        async fn walk_node(msg: &Message, ctx: &Context, node: Expr) -> anyhow::Result<Expr> {
+            Ok(match node {
+                Expr::Difference(left, right) => Expr::Difference(
+                    Box::new(walk_node(msg, ctx, *left).await?),
+                    Box::new(walk_node(msg, ctx, *right).await?),
+                ),
+                Expr::Intersection(left, right) => Expr::Intersection(
+                    Box::new(walk_node(msg, ctx, *left).await?),
+                    Box::new(walk_node(msg, ctx, *right).await?),
+                ),
+                Expr::Union(left, right) => Expr::Union(
+                    Box::new(walk_node(msg, ctx, *left).await?),
+                    Box::new(walk_node(msg, ctx, *right).await?),
+                ),
+                Expr::RoleID(id) => Expr::RoleID(id),
+                Expr::UserID(id) => Expr::UserID(id),
+                Expr::UnknownID(id) => {
+                    let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
+                    let possible_member = guild.member(ctx, id.parse::<u64>()?).await;
+                    if let Ok(member) = possible_member {
+                        Expr::UserID(member.user.id.to_string())
+                    } else {
+                        let possible_role = guild.roles.get(&RoleId::from(id.parse::<u64>()?));
+                        if let Some(role) = possible_role {
+                            Expr::RoleID(role.id.to_string())
+                        } else {
+                            anyhow::bail!("Unable to resolve role or member ID: {}", id);
+                        }
+                    }
+                }
+                Expr::StringLiteral(s) => {
+                    let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
+                    let possible_role = guild.role_by_name(s.as_str());
+                    if let Some(role) = possible_role {
+                        Expr::RoleID(role.id.to_string())
+                    } else {
+                        let possible_member = guild.member_named(s.as_str());
+                        if let Some(member) = possible_member {
+                            Expr::UserID(member.user.id.to_string())
+                        } else {
+                            anyhow::bail!(
+                                // TODO: make not case sensitive
+                                "Unable to resolve role or member name (case sensitive!): {}",
+                                s
+                            );
+                        }
+                    }
+                }
+            })
+        }
+        let ast = match walk_node(msg, ctx, ast).await {
+            Ok(ast) => ast,
+            Err(e) => {
+                msg.reply(ctx, format!("Error resolving: {}", e)).await?;
+                return Ok(());
+            }
+        };
+        msg.reply(ctx, format!("```{:#?}```", ast)).await?;
     } else {
         msg.reply(ctx, "Unknown command.").await?;
     }
