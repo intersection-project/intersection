@@ -196,7 +196,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             format!(
                 "Parsed chunks:\n{}",
                 drql::scanner::scan(args.make_contiguous().join(" ").as_str())
-                    .map(|chunk| drql::parser::parse_drql(chunk))
+                    .map(drql::parser::parse_drql)
                     .collect::<Result<Vec<_>, _>>()?
                     .into_iter()
                     .map(|chunk| format!("{:#?}", chunk))
@@ -214,7 +214,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 "Parsed & folded chunks into...\n```{:#?}```",
                 reduce_ast_chunks(
                     drql::scanner::scan(args.make_contiguous().join(" ").as_str())
-                        .map(|chunk| drql::parser::parse_drql(chunk))
+                        .map(drql::parser::parse_drql)
                         .collect::<Result<Vec<_>, _>>()?
                         .into_iter()
                 )
@@ -224,7 +224,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
     } else if command == "resolve" {
         let Some(ast) = reduce_ast_chunks(
             drql::scanner::scan(args.make_contiguous().join(" ").as_str())
-                .map(|chunk| drql::parser::parse_drql(chunk))
+                .map(drql::parser::parse_drql)
                 .collect::<Result<Vec<_>, _>>()?
                 .into_iter(),
         ) else {
@@ -270,20 +270,18 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                         .find(|(_, value)| value.name.to_lowercase() == s.to_lowercase())
                     {
                         Expr::RoleID(role.id.to_string())
+                    } else if let Some((_, member)) = guild
+                        .members // FIXME: what if the members aren't cached?
+                        .iter()
+                        .find(|(_, value)| value.user.name.to_lowercase() == s.to_lowercase())
+                    {
+                        Expr::UserID(member.user.id.to_string())
                     } else {
-                        if let Some((_, member)) = guild
-                            .members // FIXME: what if the members aren't cached?
-                            .iter()
-                            .find(|(_, value)| value.user.name.to_lowercase() == s.to_lowercase())
-                        {
-                            Expr::UserID(member.user.id.to_string())
-                        } else {
-                            anyhow::bail!(
-                                // TODO: make not case sensitive
-                                "Unable to resolve role or member **username** (use a tag and no nickname!): {}",
-                                s
-                            );
-                        }
+                        anyhow::bail!(
+                            // TODO: make not case sensitive
+                            "Unable to resolve role or member **username** (use a tag and no nickname!): {}",
+                            s
+                        );
                     }
                 }
             })
