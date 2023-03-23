@@ -73,7 +73,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
         }
 
         let subcommand = match args.pop_front() {
-            Some(subcommand) => subcommand,
+            Some(subcommand) => subcommand.to_lowercase(),
             None => {
                 msg.reply(
                     ctx,
@@ -85,22 +85,20 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 .await?;
                 return Ok(());
             }
-        }
-        .to_lowercase();
+        };
 
         if subcommand == "help" {
             msg.reply(ctx, "Available subcommands: `prefix`, `help`")
                 .await?;
         } else if subcommand == "prefix" {
             let action = match args.pop_front() {
-                Some(action) => action,
+                Some(action) => action.to_lowercase(),
                 None => {
                     msg.reply(ctx, "Specify an action verb, `get` or `set`.")
                         .await?;
                     return Ok(());
                 }
-            }
-            .to_lowercase();
+            };
 
             if action == "set" {
                 if args.is_empty() {
@@ -274,7 +272,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                         Expr::RoleID(role.id.to_string())
                     } else {
                         if let Some((_, member)) = guild
-                            .members
+                            .members // FIXME: what if the members aren't cached?
                             .iter()
                             .find(|(_, value)| value.user.name.to_lowercase() == s.to_lowercase())
                         {
