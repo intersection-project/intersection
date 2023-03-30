@@ -28,7 +28,10 @@ use drql::ast;
 use models::Guild;
 use serenity::{
     async_trait,
-    model::prelude::{Activity, Message, Ready, RoleId},
+    model::{
+        prelude::{Activity, Message, Ready, RoleId},
+        user::OnlineStatus,
+    },
     prelude::*,
 };
 
@@ -38,6 +41,18 @@ struct DB;
 
 impl TypeMapKey for DB {
     type Value = Pool<ConnectionManager<SqliteConnection>>;
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ResolvedExpr {
+    Union(Box<ResolvedExpr>, Box<ResolvedExpr>),
+    Intersection(Box<ResolvedExpr>, Box<ResolvedExpr>),
+    Difference(Box<ResolvedExpr>, Box<ResolvedExpr>),
+
+    Everyone,
+    Here,
+    UserID(String),
+    RoleID(String),
 }
 
 struct Handler;
@@ -176,56 +191,69 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             return Ok(());
         };
         #[async_recursion]
-        async fn walk_node(msg: &Message, ctx: &Context, node: Expr) -> anyhow::Result<Expr> {
+        async fn walk_node(
+            msg: &Message,
+            ctx: &Context,
+            node: Expr,
+        ) -> anyhow::Result<ResolvedExpr> {
             Ok(match node {
-                Expr::Difference(left, right) => Expr::Difference(
+                Expr::Difference(left, right) => ResolvedExpr::Difference(
                     Box::new(walk_node(msg, ctx, *left).await?),
                     Box::new(walk_node(msg, ctx, *right).await?),
                 ),
-                Expr::Intersection(left, right) => Expr::Intersection(
+                Expr::Intersection(left, right) => ResolvedExpr::Intersection(
                     Box::new(walk_node(msg, ctx, *left).await?),
                     Box::new(walk_node(msg, ctx, *right).await?),
                 ),
-                Expr::Union(left, right) => Expr::Union(
+                Expr::Union(left, right) => ResolvedExpr::Union(
                     Box::new(walk_node(msg, ctx, *left).await?),
                     Box::new(walk_node(msg, ctx, *right).await?),
                 ),
-                Expr::RoleID(id) => Expr::RoleID(id),
-                Expr::UserID(id) => Expr::UserID(id),
+                Expr::RoleID(id) => ResolvedExpr::RoleID(id),
+                Expr::UserID(id) => ResolvedExpr::UserID(id),
                 Expr::UnknownID(id) => {
-                    let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
-                    let possible_member = guild.member(ctx, id.parse::<u64>()?).await;
-                    if let Ok(member) = possible_member {
-                        Expr::UserID(member.user.id.to_string())
+                    if Some(id.clone()) == msg.guild_id.map(|id| id.to_string()) {
+                        ResolvedExpr::Everyone
                     } else {
-                        let possible_role = guild.roles.get(&RoleId::from(id.parse::<u64>()?));
-                        if let Some(role) = possible_role {
-                            Expr::RoleID(role.id.to_string())
+                        let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
+                        let possible_member = guild.member(ctx, id.parse::<u64>()?).await;
+                        if let Ok(member) = possible_member {
+                            ResolvedExpr::UserID(member.user.id.to_string())
                         } else {
-                            anyhow::bail!("Unable to resolve role or member ID: {}", id);
+                            let possible_role = guild.roles.get(&RoleId::from(id.parse::<u64>()?));
+                            if let Some(role) = possible_role {
+                                ResolvedExpr::RoleID(role.id.to_string())
+                            } else {
+                                anyhow::bail!("Unable to resolve role or member ID: {}", id);
+                            }
                         }
                     }
                 }
                 Expr::StringLiteral(s) => {
-                    // TODO: "everyone", "here"
-                    let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
-                    if let Some((_, role)) = guild
-                        .roles
-                        .iter()
-                        .find(|(_, value)| value.name.to_lowercase() == s.to_lowercase())
-                    {
-                        Expr::RoleID(role.id.to_string())
-                    } else if let Some((_, member)) = guild
-                        .members // FIXME: what if the members aren't cached?
-                        .iter()
-                        .find(|(_, value)| value.user.tag().to_lowercase() == s.to_lowercase())
-                    {
-                        Expr::UserID(member.user.id.to_string())
+                    if s == "everyone" {
+                        ResolvedExpr::Everyone
+                    } else if s == "here" {
+                        ResolvedExpr::Here
                     } else {
-                        anyhow::bail!(
+                        let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
+                        if let Some((_, role)) = guild
+                            .roles
+                            .iter()
+                            .find(|(_, value)| value.name.to_lowercase() == s.to_lowercase())
+                        {
+                            ResolvedExpr::RoleID(role.id.to_string())
+                        } else if let Some((_, member)) = guild
+                            .members // FIXME: what if the members aren't cached?
+                            .iter()
+                            .find(|(_, value)| value.user.tag().to_lowercase() == s.to_lowercase())
+                        {
+                            ResolvedExpr::UserID(member.user.id.to_string())
+                        } else {
+                            anyhow::bail!(
                             "Unable to resolve role or member **username** (use a tag like \"User#1234\" and no nickname!): {}",
                             s
                         );
+                        }
                     }
                 }
             })
@@ -243,37 +271,30 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
         async fn reduce_ast(
             msg: &Message,
             ctx: &Context,
-            node: Expr,
+            node: ResolvedExpr,
         ) -> anyhow::Result<HashSet<String>> {
             Ok(match node {
-                Expr::Difference(left, right) => reduce_ast(msg, ctx, *left)
+                ResolvedExpr::Difference(left, right) => reduce_ast(msg, ctx, *left)
                     .await?
                     .difference(&reduce_ast(msg, ctx, *right).await?)
                     .map(|x| x.to_string())
                     .collect::<HashSet<_>>(),
-                Expr::Union(left, right) => reduce_ast(msg, ctx, *left)
+                ResolvedExpr::Union(left, right) => reduce_ast(msg, ctx, *left)
                     .await?
                     .union(&reduce_ast(msg, ctx, *right).await?)
                     .map(|x| x.to_string())
                     .collect::<HashSet<_>>(),
-                Expr::Intersection(left, right) => reduce_ast(msg, ctx, *left)
+                ResolvedExpr::Intersection(left, right) => reduce_ast(msg, ctx, *left)
                     .await?
                     .intersection(&reduce_ast(msg, ctx, *right).await?)
                     .map(|x| x.to_string())
                     .collect::<HashSet<_>>(),
-                Expr::StringLiteral(_) => {
-                    anyhow::bail!("String literals should have been resolved by now")
-                }
-                Expr::UnknownID(_) => {
-                    anyhow::bail!("Unknown IDs should have been resolved by now")
-                }
-                Expr::UserID(id) => {
+                ResolvedExpr::UserID(id) => {
                     let mut set = HashSet::new();
                     set.insert(id);
                     set
                 }
-                Expr::RoleID(id) => {
-                    // TODO: @everyone, @here
+                ResolvedExpr::RoleID(id) => {
                     let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
                     let role = guild
                         .roles
@@ -283,6 +304,26 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                     for member in guild.members.values() {
                         if member.roles.contains(&role.id) {
                             set.insert(member.user.id.to_string());
+                        }
+                    }
+                    set
+                }
+                ResolvedExpr::Everyone => {
+                    let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
+                    let mut set = HashSet::new();
+                    for member in guild.members.values() {
+                        set.insert(member.user.id.to_string());
+                    }
+                    set
+                }
+                ResolvedExpr::Here => {
+                    let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
+                    let mut set = HashSet::new();
+                    for member in guild.members.values() {
+                        if let Some(presence) = guild.presences.get(&member.user.id) {
+                            if presence.status != OnlineStatus::Offline {
+                                set.insert(member.user.id.to_string());
+                            }
                         }
                     }
                     set
