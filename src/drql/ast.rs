@@ -1,3 +1,5 @@
+use serenity::model::prelude::{RoleId, UserId};
+
 #[derive(Debug, PartialEq)]
 pub enum Expr {
     Union(Box<Expr>, Box<Expr>),
@@ -6,6 +8,6 @@ pub enum Expr {
 
     StringLiteral(String),
     UnknownID(String),
-    UserID(String),
-    RoleID(String),
+    UserID(UserId),
+    RoleID(RoleId),
 }

@@ -1,3 +1,5 @@
+#![feature(is_some_and)]
+
 mod drql;
 mod models;
 mod schema;
@@ -11,11 +13,7 @@ lalrpop_mod!(
     parser
 );
 
-use std::{
-    collections::{HashSet, VecDeque},
-    env,
-};
-
+use crate::{drql::ast::Expr, models::NewGuild};
 use anyhow::anyhow;
 use async_recursion::async_recursion;
 use diesel::{
@@ -26,16 +24,12 @@ use diesel::{
 use dotenvy::dotenv;
 use drql::ast;
 use models::Guild;
-use serenity::{
-    async_trait,
-    model::{
-        prelude::{Activity, Message, Ready, RoleId},
-        user::OnlineStatus,
-    },
-    prelude::*,
+use serenity::{async_trait, model::prelude::*, prelude::*};
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    env,
+    fmt::Display,
 };
-
-use crate::{drql::ast::Expr, models::NewGuild};
 
 struct DB;
 
@@ -51,8 +45,8 @@ pub enum ResolvedExpr {
 
     Everyone,
     Here,
-    UserID(String),
-    RoleID(String),
+    UserID(UserId),
+    RoleID(RoleId),
 }
 
 struct Handler;
@@ -218,7 +212,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                         let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
                         let possible_member = guild.member(ctx, id.parse::<u64>()?).await;
                         if let Ok(member) = possible_member {
-                            ResolvedExpr::UserID(member.user.id.to_string())
+                            ResolvedExpr::UserID(member.user.id)
                         } else {
                             let possible_role = guild.roles.get(&RoleId::from(id.parse::<u64>()?));
                             if let Some(role) = possible_role {
@@ -227,7 +221,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                                 {
                                     anyhow::bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name);
                                 }
-                                ResolvedExpr::RoleID(role.id.to_string())
+                                ResolvedExpr::RoleID(role.id)
                             } else {
                                 anyhow::bail!("Unable to resolve role or member ID: {}", id);
                             }
@@ -257,13 +251,13 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                             {
                                 anyhow::bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name);
                             }
-                            ResolvedExpr::RoleID(role.id.to_string())
+                            ResolvedExpr::RoleID(role.id)
                         } else if let Some((_, member)) = guild
                             .members // FIXME: what if the members aren't cached?
                             .iter()
                             .find(|(_, value)| value.user.tag().to_lowercase() == s.to_lowercase())
                         {
-                            ResolvedExpr::UserID(member.user.id.to_string())
+                            ResolvedExpr::UserID(member.user.id)
                         } else {
                             anyhow::bail!(
                             "Unable to resolve role or member **username** (use a tag like \"User#1234\" and no nickname!): {}",
@@ -288,22 +282,22 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             msg: &Message,
             ctx: &Context,
             node: ResolvedExpr,
-        ) -> anyhow::Result<HashSet<String>> {
+        ) -> anyhow::Result<HashSet<UserId>> {
             Ok(match node {
                 ResolvedExpr::Difference(left, right) => reduce_ast(msg, ctx, *left)
                     .await?
                     .difference(&reduce_ast(msg, ctx, *right).await?)
-                    .map(|x| x.to_string())
+                    .map(|x| x.clone())
                     .collect::<HashSet<_>>(),
                 ResolvedExpr::Union(left, right) => reduce_ast(msg, ctx, *left)
                     .await?
                     .union(&reduce_ast(msg, ctx, *right).await?)
-                    .map(|x| x.to_string())
+                    .map(|x| x.clone())
                     .collect::<HashSet<_>>(),
                 ResolvedExpr::Intersection(left, right) => reduce_ast(msg, ctx, *left)
                     .await?
                     .intersection(&reduce_ast(msg, ctx, *right).await?)
-                    .map(|x| x.to_string())
+                    .map(|x| x.clone())
                     .collect::<HashSet<_>>(),
                 ResolvedExpr::UserID(id) => {
                     let mut set = HashSet::new();
@@ -314,12 +308,12 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                     let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
                     let role = guild
                         .roles
-                        .get(&RoleId::from(id.parse::<u64>()?))
+                        .get(&id)
                         .ok_or(anyhow!("Unable to resolve role"))?;
                     let mut set = HashSet::new();
                     for member in guild.members.values() {
                         if member.roles.contains(&role.id) {
-                            set.insert(member.user.id.to_string());
+                            set.insert(member.user.id);
                         }
                     }
                     set
@@ -328,7 +322,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                     let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
                     let mut set = HashSet::new();
                     for member in guild.members.values() {
-                        set.insert(member.user.id.to_string());
+                        set.insert(member.user.id);
                     }
                     set
                 }
@@ -338,7 +332,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                     for member in guild.members.values() {
                         if let Some(presence) = guild.presences.get(&member.user.id) {
                             if presence.status != OnlineStatus::Offline {
-                                set.insert(member.user.id.to_string());
+                                set.insert(member.user.id);
                             }
                         }
                     }
@@ -346,18 +340,115 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 }
             })
         }
-        let ast = match reduce_ast(msg, ctx, ast).await {
+        let members_to_ping = match reduce_ast(msg, ctx, ast).await {
             Ok(ast) => ast,
             Err(e) => {
                 msg.reply(ctx, format!("Error reducing: {}", e)).await?;
                 return Ok(());
             }
         };
+
+        // Now that we know which members we have to notify, we can do some specialized calculations
+        // to try to replace members in that set with existing roles in the server. First, we choose our
+        // "qualifiers" -- any role in this server that is a **subset** of our members_to_ping.
+
+        let discord_guild = msg.guild(ctx).ok_or(anyhow!("Failed to resolve guild"))?;
+        #[derive(Debug, PartialEq, Eq, Hash, Clone)]
+        enum RoleThing {
+            Everyone,
+            Here,
+            Id(RoleId),
+        }
+        impl Display for RoleThing {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match self {
+                    RoleThing::Everyone => write!(f, "@everyone"),
+                    RoleThing::Here => write!(f, "@here"),
+                    RoleThing::Id(id) => write!(f, "<@&{}>", id),
+                }
+            }
+        }
+        let mut roles_and_their_members: HashMap<RoleThing, RwLock<HashSet<UserId>>> =
+            HashMap::new();
+
+        roles_and_their_members.insert(
+            RoleThing::Everyone,
+            RwLock::new(
+                discord_guild
+                    .members
+                    .values()
+                    .map(|v| v.user.id)
+                    .collect::<HashSet<_>>(),
+            ),
+        );
+        roles_and_their_members.insert(
+            RoleThing::Here,
+            RwLock::new(
+                discord_guild
+                    .members
+                    .values()
+                    .filter(|v| {
+                        discord_guild
+                            .presences
+                            .get(&v.user.id)
+                            .is_some_and(|p| p.status != OnlineStatus::Offline)
+                    })
+                    .map(|v| v.user.id)
+                    .collect::<HashSet<_>>(),
+            ),
+        );
+
+        for member in discord_guild.members.values() {
+            for role in member.roles(ctx).ok_or(anyhow!("No role data??"))? {
+                if let Some(_) = roles_and_their_members.get(&RoleThing::Id(role.id)) {
+                    roles_and_their_members
+                        .get(&RoleThing::Id(role.id))
+                        .ok_or(anyhow!("E"))?
+                        .write()
+                        .await
+                        .insert(member.user.id);
+                } else {
+                    roles_and_their_members.insert(
+                        RoleThing::Id(role.id),
+                        RwLock::new(HashSet::from([member.user.id])),
+                    );
+                }
+            }
+        }
+
+        // roles_and_their_members is now a hashmap from role ids to their members. with this, we
+        // can now iterate over every role and see if it's a subset of our target. if so, we add
+        // it to the qualifiers list.
+        let mut qualifiers: HashMap<RoleThing, RwLock<HashSet<UserId>>> = HashMap::new();
+        for (id, members_lock) in &roles_and_their_members {
+            let members = members_lock.read().await;
+            if members.is_subset(&members_to_ping) {
+                // FIXME: This is very ugly and probably slow
+                qualifiers.insert((*id).clone(), RwLock::new(members.clone()));
+            }
+        }
+
+        // Now we take the union of all qualifiers and subtract that from the target to obtain any outliers.
+
+        let mut included_members: HashSet<UserId> = HashSet::new();
+        for (_, members_lock) in &qualifiers {
+            for member in members_lock.read().await.iter() {
+                included_members.insert(member.clone());
+            }
+        }
+
+        let outliers = members_to_ping.difference(&included_members);
+
         msg.reply(
             ctx,
             format!(
-                "{}",
-                ast.iter()
+                "{} {}",
+                qualifiers
+                    .keys()
+                    .map(|k| k.to_string())
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                outliers
                     .map(|id| format!("<@{}>", id))
                     .collect::<Vec<_>>()
                     .join(" ")

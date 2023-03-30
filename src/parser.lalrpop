@@ -2,7 +2,8 @@
 
 use crate::drql::ast;
 use crate::drql::lexer;
-use lalrpop_util::ErrorRecovery;
+use serenity::model::prelude::{RoleId, UserId};
+use lalrpop_util::{ErrorRecovery, ParseError};
 
 grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, lexer::Tok, lexer::LexicalError>>);
 
@@ -18,8 +19,9 @@ Primary: ast::Expr = {
     <STRING_LITERAL> => ast::Expr::StringLiteral(<>),
     <RAW_NAME> => ast::Expr::StringLiteral(<>),
     <ID_LITERAL> => ast::Expr::UnknownID(<>),
-    <USER_MENTION> => ast::Expr::UserID(<>),
-    <ROLE_MENTION> => ast::Expr::RoleID(<>),
+    // TODO: Maybe parseinterror shouldn't be in the lexer error part
+    <USER_MENTION> =>? Ok(ast::Expr::UserID(UserId(<>.parse().map_err(|e| ParseError::User {error: lexer::LexicalError::ParseIntError(e)})?))),
+    <ROLE_MENTION> =>? Ok(ast::Expr::RoleID(RoleId(<>.parse().map_err(|e| ParseError::User {error: lexer::LexicalError::ParseIntError(e)})?))),
     "(" <Expr> ")",
 };
 

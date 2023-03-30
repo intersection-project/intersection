@@ -1,3 +1,5 @@
+use std::num::ParseIntError;
+
 use logos::{Lexer, Logos};
 
 pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
@@ -8,6 +10,12 @@ pub enum LexicalError {
     NoMatchingRule,
     IDK((usize, char), String),
     UnterminatedStringLiteral(usize),
+    ParseIntError(ParseIntError),
+}
+impl From<ParseIntError> for LexicalError {
+    fn from(value: ParseIntError) -> Self {
+        LexicalError::ParseIntError(value)
+    }
 }
 
 #[derive(Logos, Debug, Clone, PartialEq)]

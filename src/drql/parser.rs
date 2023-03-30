@@ -46,9 +46,9 @@ pub fn parse_drql(input: &str) -> Result<ast::Expr, DrqlParserError<ast::Expr>> 
 
 #[cfg(test)]
 mod tests {
-    use crate::drql::ast::Expr;
-
     use super::*;
+    use crate::drql::ast::Expr;
+    use serenity::model::prelude::{RoleId, UserId};
 
     #[test]
     fn many_token_types() {
@@ -69,11 +69,11 @@ mod tests {
                                 Box::new(Expr::StringLiteral("raw_name".to_string())),
                                 Box::new(Expr::StringLiteral("string literal".to_string()))
                             )),
-                            Box::new(Expr::UserID("1".to_string()))
+                            Box::new(Expr::UserID(UserId(1)))
                         )),
-                        Box::new(Expr::UserID("2".to_string()))
+                        Box::new(Expr::UserID(UserId(2)))
                     )),
-                    Box::new(Expr::RoleID("3".to_string()))
+                    Box::new(Expr::RoleID(RoleId(3)))
                 )),
                 Box::new(Expr::UnknownID("4".to_string()))
             ))
