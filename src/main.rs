@@ -222,6 +222,11 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                         } else {
                             let possible_role = guild.roles.get(&RoleId::from(id.parse::<u64>()?));
                             if let Some(role) = possible_role {
+                                if !role.mentionable
+                                    && msg.member(ctx).await?.permissions(ctx)?.mention_everyone()
+                                {
+                                    anyhow::bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name);
+                                }
                                 ResolvedExpr::RoleID(role.id.to_string())
                             } else {
                                 anyhow::bail!("Unable to resolve role or member ID: {}", id);
@@ -231,8 +236,14 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 }
                 Expr::StringLiteral(s) => {
                     if s == "everyone" {
+                        if !msg.member(ctx).await?.permissions(ctx)?.mention_everyone() {
+                            anyhow::bail!("You do not have the \"Mention everyone, here, and All Roles\" permission required to use the role everyone.");
+                        }
                         ResolvedExpr::Everyone
                     } else if s == "here" {
+                        if !msg.member(ctx).await?.permissions(ctx)?.mention_everyone() {
+                            anyhow::bail!("You do not have the \"Mention everyone, here, and All Roles\" permission required to use the role here.");
+                        }
                         ResolvedExpr::Here
                     } else {
                         let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
@@ -241,6 +252,11 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                             .iter()
                             .find(|(_, value)| value.name.to_lowercase() == s.to_lowercase())
                         {
+                            if !role.mentionable
+                                && msg.member(ctx).await?.permissions(ctx)?.mention_everyone()
+                            {
+                                anyhow::bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name);
+                            }
                             ResolvedExpr::RoleID(role.id.to_string())
                         } else if let Some((_, member)) = guild
                             .members // FIXME: what if the members aren't cached?
