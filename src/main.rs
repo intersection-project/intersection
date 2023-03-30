@@ -287,17 +287,17 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 ResolvedExpr::Difference(left, right) => reduce_ast(msg, ctx, *left)
                     .await?
                     .difference(&reduce_ast(msg, ctx, *right).await?)
-                    .map(|x| x.clone())
+                    .copied()
                     .collect::<HashSet<_>>(),
                 ResolvedExpr::Union(left, right) => reduce_ast(msg, ctx, *left)
                     .await?
                     .union(&reduce_ast(msg, ctx, *right).await?)
-                    .map(|x| x.clone())
+                    .copied()
                     .collect::<HashSet<_>>(),
                 ResolvedExpr::Intersection(left, right) => reduce_ast(msg, ctx, *left)
                     .await?
                     .intersection(&reduce_ast(msg, ctx, *right).await?)
-                    .map(|x| x.clone())
+                    .copied()
                     .collect::<HashSet<_>>(),
                 ResolvedExpr::UserID(id) => {
                     let mut set = HashSet::new();
@@ -400,7 +400,10 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
 
         for member in discord_guild.members.values() {
             for role in member.roles(ctx).ok_or(anyhow!("No role data??"))? {
-                if let Some(_) = roles_and_their_members.get(&RoleThing::Id(role.id)) {
+                if roles_and_their_members
+                    .get(&RoleThing::Id(role.id))
+                    .is_some()
+                {
                     roles_and_their_members
                         .get(&RoleThing::Id(role.id))
                         .ok_or(anyhow!("E"))?
@@ -431,9 +434,9 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
         // Now we take the union of all qualifiers and subtract that from the target to obtain any outliers.
 
         let mut included_members: HashSet<UserId> = HashSet::new();
-        for (_, members_lock) in &qualifiers {
+        for members_lock in qualifiers.values() {
             for member in members_lock.read().await.iter() {
-                included_members.insert(member.clone());
+                included_members.insert(*member);
             }
         }
 
