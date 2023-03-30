@@ -11,7 +11,10 @@ lalrpop_mod!(
     parser
 );
 
-use std::{collections::VecDeque, env};
+use std::{
+    collections::{HashSet, VecDeque},
+    env,
+};
 
 use anyhow::anyhow;
 use async_recursion::async_recursion;
@@ -162,7 +165,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             )
             .await?;
         }
-    } else if command == "resolve" {
+    } else if command == "run" {
         let Some(ast) = reduce_ast_chunks(
             drql::scanner::scan(args.make_contiguous().join(" ").as_str())
                 .map(drql::parser::parse_drql)
@@ -204,6 +207,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                     }
                 }
                 Expr::StringLiteral(s) => {
+                    // TODO: "everyone", "here"
                     let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
                     if let Some((_, role)) = guild
                         .roles
@@ -214,13 +218,12 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                     } else if let Some((_, member)) = guild
                         .members // FIXME: what if the members aren't cached?
                         .iter()
-                        .find(|(_, value)| value.user.name.to_lowercase() == s.to_lowercase())
+                        .find(|(_, value)| value.user.tag().to_lowercase() == s.to_lowercase())
                     {
                         Expr::UserID(member.user.id.to_string())
                     } else {
                         anyhow::bail!(
-                            // TODO: make not case sensitive
-                            "Unable to resolve role or member **username** (use a tag and no nickname!): {}",
+                            "Unable to resolve role or member **username** (use a tag like \"User#1234\" and no nickname!): {}",
                             s
                         );
                     }
@@ -234,7 +237,76 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 return Ok(());
             }
         };
-        msg.reply(ctx, format!("```{:#?}```", ast)).await?;
+
+        // Walk over the AST one more time and resolve stuff to the final output
+        #[async_recursion]
+        async fn reduce_ast(
+            msg: &Message,
+            ctx: &Context,
+            node: Expr,
+        ) -> anyhow::Result<HashSet<String>> {
+            Ok(match node {
+                Expr::Difference(left, right) => reduce_ast(msg, ctx, *left)
+                    .await?
+                    .difference(&reduce_ast(msg, ctx, *right).await?)
+                    .map(|x| x.to_string())
+                    .collect::<HashSet<_>>(),
+                Expr::Union(left, right) => reduce_ast(msg, ctx, *left)
+                    .await?
+                    .union(&reduce_ast(msg, ctx, *right).await?)
+                    .map(|x| x.to_string())
+                    .collect::<HashSet<_>>(),
+                Expr::Intersection(left, right) => reduce_ast(msg, ctx, *left)
+                    .await?
+                    .intersection(&reduce_ast(msg, ctx, *right).await?)
+                    .map(|x| x.to_string())
+                    .collect::<HashSet<_>>(),
+                Expr::StringLiteral(_) => {
+                    anyhow::bail!("String literals should have been resolved by now")
+                }
+                Expr::UnknownID(_) => {
+                    anyhow::bail!("Unknown IDs should have been resolved by now")
+                }
+                Expr::UserID(id) => {
+                    let mut set = HashSet::new();
+                    set.insert(id);
+                    set
+                }
+                Expr::RoleID(id) => {
+                    // TODO: @everyone, @here
+                    let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
+                    let role = guild
+                        .roles
+                        .get(&RoleId::from(id.parse::<u64>()?))
+                        .ok_or(anyhow!("Unable to resolve role"))?;
+                    let mut set = HashSet::new();
+                    for member in guild.members.values() {
+                        if member.roles.contains(&role.id) {
+                            set.insert(member.user.id.to_string());
+                        }
+                    }
+                    set
+                }
+            })
+        }
+        let ast = match reduce_ast(msg, ctx, ast).await {
+            Ok(ast) => ast,
+            Err(e) => {
+                msg.reply(ctx, format!("Error reducing: {}", e)).await?;
+                return Ok(());
+            }
+        };
+        msg.reply(
+            ctx,
+            format!(
+                "{}",
+                ast.iter()
+                    .map(|id| format!("<@{}>", id))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
+        )
+        .await?;
     } else {
         msg.reply(ctx, "Unknown command.").await?;
     }
