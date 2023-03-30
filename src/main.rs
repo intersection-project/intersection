@@ -432,7 +432,6 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
         }
 
         // Now we take the union of all qualifiers and subtract that from the target to obtain any outliers.
-
         let mut included_members: HashSet<UserId> = HashSet::new();
         for members_lock in qualifiers.values() {
             for member in members_lock.read().await.iter() {
@@ -442,11 +441,34 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
 
         let outliers = members_to_ping.difference(&included_members);
 
+        // Now we remove redundant qualifiers. This is done by iterating over each one and determining
+        // if one of the other values in it is a superset of itself, if so, it's redundant and can be
+        // removed.
+        let mut new_qualifiers: HashMap<RoleThing, RwLock<HashSet<UserId>>> = HashMap::new();
+        for (k, v) in &qualifiers {
+            let value = v.read().await;
+            let mut has_superset = false;
+            for (k2, v2) in &qualifiers {
+                if k == k2 {
+                    continue;
+                }
+
+                let other = v2.read().await;
+                if other.is_superset(&value) {
+                    has_superset = true;
+                    break;
+                }
+            }
+            if !has_superset {
+                new_qualifiers.insert((*k).clone(), RwLock::new(value.clone()));
+            }
+        }
+
         msg.reply(
             ctx,
             format!(
                 "{} {}",
-                qualifiers
+                new_qualifiers
                     .keys()
                     .map(|k| k.to_string())
                     .collect::<Vec<_>>()
