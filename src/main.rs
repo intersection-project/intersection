@@ -47,27 +47,41 @@ struct CommandExecution<'a> {
     args: VecDeque<&'a str>,
 }
 
+#[derive(PartialEq, Eq, Hash)]
+enum RoleType {
+    Everyone,
+    Here,
+    Id(RoleId),
+}
+impl Display for RoleType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RoleType::Everyone => write!(f, "@everyone"),
+            RoleType::Here => write!(f, "@here"),
+            RoleType::Id(id) => write!(f, "<@{}>", id),
+        }
+    }
+}
+
 /// Function to fold an iterator of ASTs into one large union expression
 fn reduce_ast_chunks(iter: impl Iterator<Item = ast::Expr>) -> Option<ast::Expr> {
     iter.reduce(|acc, chunk| ast::Expr::Union(Box::new(acc), Box::new(chunk)))
 }
 
-type CustomMember = Member;
 trait CustomMemberImpl {
     fn can_mention_role(&self, ctx: &Context, role: &Role) -> anyhow::Result<bool>;
 }
-impl CustomMemberImpl for CustomMember {
+impl CustomMemberImpl for Member {
     fn can_mention_role(&self, ctx: &Context, role: &Role) -> anyhow::Result<bool> {
         Ok(role.mentionable || (self.permissions(ctx)?.mention_everyone()))
     }
 }
 
-type CustomGuild = Guild;
 trait CustomGuildImpl {
     fn get_everyone(&self) -> HashSet<UserId>;
     fn get_here(&self) -> HashSet<UserId>;
 }
-impl CustomGuildImpl for CustomGuild {
+impl CustomGuildImpl for Guild {
     fn get_everyone(&self) -> HashSet<UserId> {
         self.members
             .values()
@@ -86,11 +100,10 @@ impl CustomGuildImpl for CustomGuild {
     }
 }
 
-type CustomRole = Role;
 trait CustomRoleImpl {
     fn members(&self, guild: &Guild) -> HashSet<UserId>;
 }
-impl CustomRoleImpl for CustomRole {
+impl CustomRoleImpl for Role {
     fn members(&self, guild: &Guild) -> HashSet<UserId> {
         HashSet::from_iter(
             guild
@@ -380,42 +393,26 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
         // to try to replace members in that set with existing roles in the server. First, we choose our
         // "qualifiers" -- any role in this server that is a **subset** of our members_to_ping.
 
-        #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-        enum RoleThing {
-            Everyone,
-            Here,
-            Id(RoleId),
-        }
-        impl Display for RoleThing {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                match self {
-                    RoleThing::Everyone => write!(f, "@everyone"),
-                    RoleThing::Here => write!(f, "@here"),
-                    RoleThing::Id(id) => write!(f, "<@&{}>", id),
-                }
-            }
-        }
-
         // A hashmap of every role in the guild and its members.
-        let mut roles_and_their_members: HashMap<RoleThing, HashSet<UserId>> = HashMap::from([
-            (RoleThing::Everyone, discord_guild.get_everyone()),
-            (RoleThing::Here, discord_guild.get_here()),
+        let mut roles_and_their_members: HashMap<RoleType, HashSet<UserId>> = HashMap::from([
+            (RoleType::Everyone, discord_guild.get_everyone()),
+            (RoleType::Here, discord_guild.get_here()),
         ]);
 
         for member in discord_guild.members.values() {
             for role in member.roles(ctx).ok_or(anyhow!("No role data??"))? {
-                if let Some(entry) = roles_and_their_members.get_mut(&RoleThing::Id(role.id)) {
+                if let Some(entry) = roles_and_their_members.get_mut(&RoleType::Id(role.id)) {
                     entry.insert(member.user.id);
                 } else {
                     roles_and_their_members
-                        .insert(RoleThing::Id(role.id), HashSet::from([member.user.id]));
+                        .insert(RoleType::Id(role.id), HashSet::from([member.user.id]));
                 }
             }
         }
 
         // determine which of the available roles in the guild is a subset of our target notification
         // and qualify it
-        let qualifiers: HashMap<&RoleThing, &HashSet<UserId>> = roles_and_their_members
+        let qualifiers: HashMap<&RoleType, &HashSet<UserId>> = roles_and_their_members
             .iter()
             .filter(|(_, members)| members.is_subset(&members_to_ping))
             .collect::<HashMap<_, _>>();
@@ -423,7 +420,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
         // Now we remove redundant qualifiers. This is done by iterating over each one and determining
         // if one of the other values in it is a superset of itself, if so, it's redundant and can be
         // removed.
-        let new_qualifiers: HashMap<&RoleThing, &HashSet<UserId>> = qualifiers
+        let new_qualifiers: HashMap<&RoleType, &HashSet<UserId>> = qualifiers
             .iter()
             .map(|(&a, &b)| (a, b)) // TODO: Is there a way to do this without copying?
             .filter(|(key, value)| {
