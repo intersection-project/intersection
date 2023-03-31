@@ -401,7 +401,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                     continue;
                 }
 
-                if other.is_superset(&value) {
+                if other.is_superset(value) {
                     has_superset = true;
                     break;
                 }
