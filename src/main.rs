@@ -334,6 +334,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             }
         }
 
+        // A hashmap of every role in the guild and its members.
         let mut roles_and_their_members: HashMap<RoleThing, HashSet<UserId>> = HashMap::from([
             (
                 RoleThing::Everyone,
@@ -370,25 +371,12 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             }
         }
 
-        // roles_and_their_members is now a hashmap from role ids to their members. with this, we
-        // can now iterate over every role and see if it's a subset of our target. if so, we add
-        // it to the qualifiers list.
-        let mut qualifiers: HashMap<&RoleThing, &HashSet<UserId>> = HashMap::new();
-        for (id, members) in &roles_and_their_members {
-            if members.is_subset(&members_to_ping) {
-                qualifiers.insert(id, members);
-            }
-        }
-
-        // Now we take the union of all qualifiers and subtract that from the target to obtain any outliers.
-        let mut included_members: HashSet<UserId> = HashSet::new();
-        for members in qualifiers.values() {
-            for member in members.iter() {
-                included_members.insert(*member);
-            }
-        }
-
-        let outliers = members_to_ping.difference(&included_members);
+        // determine which of the available roles in the guild is a subset of our target notification
+        // and qualify it
+        let qualifiers: HashMap<&RoleThing, &HashSet<UserId>> = roles_and_their_members
+            .iter()
+            .filter(|(_, members)| members.is_subset(&members_to_ping))
+            .collect::<HashMap<_, _>>();
 
         // Now we remove redundant qualifiers. This is done by iterating over each one and determining
         // if one of the other values in it is a superset of itself, if so, it's redundant and can be
@@ -410,6 +398,15 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 new_qualifiers.insert(k, value);
             }
         }
+
+        // Now that new_qualifiers holds the roles that we plan on pinging, we determine our outliers.
+        let included_members: HashSet<UserId> = qualifiers
+            .into_values()
+            .flatten()
+            .copied()
+            .collect::<HashSet<_>>();
+
+        let outliers = members_to_ping.difference(&included_members);
 
         msg.reply(
             ctx,
