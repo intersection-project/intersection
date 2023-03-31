@@ -189,6 +189,8 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             return Ok(());
         };
 
+        let discord_guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
+
         /// Walk over the [Expr] type and reduce it into a set of user IDs that
         /// need to be mentioned
         #[async_recursion]
@@ -197,6 +199,8 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             ctx: &Context,
             node: Expr,
         ) -> anyhow::Result<HashSet<UserId>> {
+            let discord_guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
+
             Ok(match node {
                 Expr::Difference(left, right) => walk_and_reduce_ast(msg, ctx, *left)
                     .await?
@@ -215,30 +219,19 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                     .collect::<HashSet<_>>(),
                 Expr::UserID(id) => HashSet::from([id]),
                 Expr::RoleID(id) => {
-                    if id.to_string()
-                        == msg
-                            .guild_id
-                            .ok_or(anyhow!("Unable to resolve guild"))?
-                            .to_string()
-                    {
+                    if id.to_string() == discord_guild.id.to_string() {
                         walk_and_reduce_ast(msg, ctx, Expr::StringLiteral("everyone".to_string()))
                             .await?
                     } else {
-                        let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
-                        let role = guild
+                        let role = discord_guild
                             .roles
                             .get(&id)
                             .ok_or(anyhow!("Unable to resolve role"))?;
-                        members_of_role(&guild, role)
+                        members_of_role(&discord_guild, role)
                     }
                 }
                 Expr::UnknownID(id) => {
-                    if id
-                        == msg
-                            .guild_id
-                            .map(|id| id.to_string())
-                            .ok_or(anyhow!("Unable to resolve guild"))?
-                    {
+                    if id == discord_guild.id.to_string() {
                         walk_and_reduce_ast(msg, ctx, Expr::StringLiteral("everyone".to_string()))
                             .await?
                     } else {
@@ -260,33 +253,31 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                     }
                 }
                 Expr::StringLiteral(s) => {
-                    let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
                     if s == "everyone" {
                         if !msg.member(ctx).await?.permissions(ctx)?.mention_everyone() {
                             anyhow::bail!("You do not have the \"Mention everyone, here, and All Roles\" permission required to use the role everyone.");
                         }
 
-                        HashSet::from_iter(guild.members.values().map(|member| member.user.id))
+                        HashSet::from_iter(
+                            discord_guild.members.values().map(|member| member.user.id),
+                        )
                     } else if s == "here" {
                         if !msg.member(ctx).await?.permissions(ctx)?.mention_everyone() {
                             anyhow::bail!("You do not have the \"Mention everyone, here, and All Roles\" permission required to use the role here.");
                         }
 
                         HashSet::from_iter(
-                            guild
+                            discord_guild
                                 .members
                                 .values()
                                 .filter(|member| {
-                                    guild
-                                        .presences
-                                        .get(&member.user.id)
-                                        .is_some_and(|presence| {
-                                            presence.status != OnlineStatus::Offline
-                                        })
+                                    discord_guild.presences.get(&member.user.id).is_some_and(
+                                        |presence| presence.status != OnlineStatus::Offline,
+                                    )
                                 })
                                 .map(|member| member.user.id),
                         )
-                    } else if let Some((_, role)) = guild
+                    } else if let Some((_, role)) = discord_guild
                         .roles
                         .iter()
                         .find(|(_, value)| value.name.to_lowercase() == s.to_lowercase())
@@ -295,7 +286,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                             anyhow::bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name);
                         }
                         walk_and_reduce_ast(msg, ctx, Expr::RoleID(role.id)).await?
-                    } else if let Some((_, member)) = guild
+                    } else if let Some((_, member)) = discord_guild
                         .members // FIXME: what if the members aren't cached?
                         .iter()
                         .find(|(_, value)| value.user.tag().to_lowercase() == s.to_lowercase())
@@ -327,7 +318,6 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
         // to try to replace members in that set with existing roles in the server. First, we choose our
         // "qualifiers" -- any role in this server that is a **subset** of our members_to_ping.
 
-        let discord_guild = msg.guild(ctx).ok_or(anyhow!("Failed to resolve guild"))?;
         #[derive(Debug, PartialEq, Eq, Hash, Clone)]
         enum RoleThing {
             Everyone,
