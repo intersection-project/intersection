@@ -286,30 +286,28 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                             }
                         }
                         set
-                    } else {
-                        if let Some((_, role)) = guild
-                            .roles
-                            .iter()
-                            .find(|(_, value)| value.name.to_lowercase() == s.to_lowercase())
+                    } else if let Some((_, role)) = guild
+                        .roles
+                        .iter()
+                        .find(|(_, value)| value.name.to_lowercase() == s.to_lowercase())
+                    {
+                        if !role.mentionable
+                            && msg.member(ctx).await?.permissions(ctx)?.mention_everyone()
                         {
-                            if !role.mentionable
-                                && msg.member(ctx).await?.permissions(ctx)?.mention_everyone()
-                            {
-                                anyhow::bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name);
-                            }
-                            walk_and_reduce_ast(msg, ctx, Expr::RoleID(role.id)).await?
-                        } else if let Some((_, member)) = guild
-                            .members // FIXME: what if the members aren't cached?
-                            .iter()
-                            .find(|(_, value)| value.user.tag().to_lowercase() == s.to_lowercase())
-                        {
-                            walk_and_reduce_ast(msg, ctx, Expr::UserID(member.user.id)).await?
-                        } else {
-                            anyhow::bail!(
-                            "Unable to resolve role or member **username** (use a tag like \"User#1234\" and no nickname!): {}",
-                            s
-                        );
+                            anyhow::bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name);
                         }
+                        walk_and_reduce_ast(msg, ctx, Expr::RoleID(role.id)).await?
+                    } else if let Some((_, member)) = guild
+                        .members // FIXME: what if the members aren't cached?
+                        .iter()
+                        .find(|(_, value)| value.user.tag().to_lowercase() == s.to_lowercase())
+                    {
+                        walk_and_reduce_ast(msg, ctx, Expr::UserID(member.user.id)).await?
+                    } else {
+                        anyhow::bail!(
+                        "Unable to resolve role or member **username** (use a tag like \"User#1234\" and no nickname!): {}",
+                        s
+                    );
                     }
                 }
             })
