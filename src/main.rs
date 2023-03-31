@@ -49,13 +49,13 @@ struct CommandExecution<'a> {
 
 /// Function to obtain all members in a role
 fn members_of_role(guild: &Guild, role: &Role) -> HashSet<UserId> {
-    let mut set = HashSet::new();
-    for member in guild.members.values() {
-        if member.roles.contains(&role.id) {
-            set.insert(member.user.id);
-        }
-    }
-    set
+    HashSet::from_iter(
+        guild
+            .members
+            .values()
+            .filter(|member| member.roles.contains(&role.id))
+            .map(|member| member.user.id),
+    )
 }
 
 /// Function to fold an iterator of ASTs into one large union expression
@@ -208,11 +208,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                     .union(&walk_and_reduce_ast(msg, ctx, *right).await?)
                     .copied()
                     .collect::<HashSet<_>>(),
-                Expr::UserID(id) => {
-                    let mut set = HashSet::new();
-                    set.insert(id);
-                    set
-                }
+                Expr::UserID(id) => HashSet::from([id]),
                 Expr::RoleID(id) => {
                     if id.to_string()
                         == msg
@@ -267,25 +263,26 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                             anyhow::bail!("You do not have the \"Mention everyone, here, and All Roles\" permission required to use the role everyone.");
                         }
 
-                        let mut set = HashSet::new();
-                        for member in guild.members.values() {
-                            set.insert(member.user.id);
-                        }
-                        set
+                        HashSet::from_iter(guild.members.values().map(|member| member.user.id))
                     } else if s == "here" {
                         if !msg.member(ctx).await?.permissions(ctx)?.mention_everyone() {
                             anyhow::bail!("You do not have the \"Mention everyone, here, and All Roles\" permission required to use the role here.");
                         }
 
-                        let mut set = HashSet::new();
-                        for member in guild.members.values() {
-                            if let Some(presence) = guild.presences.get(&member.user.id) {
-                                if presence.status != OnlineStatus::Offline {
-                                    set.insert(member.user.id);
-                                }
-                            }
-                        }
-                        set
+                        HashSet::from_iter(
+                            guild
+                                .members
+                                .values()
+                                .filter(|member| {
+                                    guild
+                                        .presences
+                                        .get(&member.user.id)
+                                        .is_some_and(|presence| {
+                                            presence.status != OnlineStatus::Offline
+                                        })
+                                })
+                                .map(|member| member.user.id),
+                        )
                     } else if let Some((_, role)) = guild
                         .roles
                         .iter()
