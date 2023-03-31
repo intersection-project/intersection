@@ -47,25 +47,59 @@ struct CommandExecution<'a> {
     args: VecDeque<&'a str>,
 }
 
-/// Function to obtain all members in a role
-fn members_of_role(guild: &Guild, role: &Role) -> HashSet<UserId> {
-    HashSet::from_iter(
-        guild
-            .members
-            .values()
-            .filter(|member| member.roles.contains(&role.id))
-            .map(|member| member.user.id),
-    )
-}
-
 /// Function to fold an iterator of ASTs into one large union expression
 fn reduce_ast_chunks(iter: impl Iterator<Item = ast::Expr>) -> Option<ast::Expr> {
     iter.reduce(|acc, chunk| ast::Expr::Union(Box::new(acc), Box::new(chunk)))
 }
 
-/// Determine if a user can mention a given role
-fn can_mention_role(ctx: &Context, role: &Role, member: &Member) -> anyhow::Result<bool> {
-    Ok(role.mentionable || (member.permissions(ctx)?.mention_everyone()))
+type CustomMember = Member;
+trait CustomMemberImpl {
+    fn can_mention_role(&self, ctx: &Context, role: &Role) -> anyhow::Result<bool>;
+}
+impl CustomMemberImpl for CustomMember {
+    fn can_mention_role(&self, ctx: &Context, role: &Role) -> anyhow::Result<bool> {
+        Ok(role.mentionable || (self.permissions(ctx)?.mention_everyone()))
+    }
+}
+
+type CustomGuild = Guild;
+trait CustomGuildImpl {
+    fn get_everyone(&self) -> HashSet<UserId>;
+    fn get_here(&self) -> HashSet<UserId>;
+}
+impl CustomGuildImpl for CustomGuild {
+    fn get_everyone(&self) -> HashSet<UserId> {
+        self.members
+            .values()
+            .map(|member| member.user.id)
+            .collect::<HashSet<_>>()
+    }
+    fn get_here(&self) -> HashSet<UserId> {
+        self.get_everyone()
+            .into_iter()
+            .filter(|id| {
+                self.presences
+                    .get(id)
+                    .is_some_and(|presence| presence.status != OnlineStatus::Offline)
+            })
+            .collect::<HashSet<_>>()
+    }
+}
+
+type CustomRole = Role;
+trait CustomRoleImpl {
+    fn members(&self, guild: &Guild) -> HashSet<UserId>;
+}
+impl CustomRoleImpl for CustomRole {
+    fn members(&self, guild: &Guild) -> HashSet<UserId> {
+        HashSet::from_iter(
+            guild
+                .members
+                .values()
+                .filter(|member| member.roles.contains(&self.id))
+                .map(|member| member.user.id),
+        )
+    }
 }
 
 /// Function called whenever a **message-based command** is triggered.
@@ -226,7 +260,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                             .get(&id)
                             .ok_or(anyhow!("Unable to resolve role"))?;
 
-                        members_of_role(&discord_guild, role)
+                        role.members(&discord_guild)
                     }
                 }
                 Expr::UnknownID(id) => {
@@ -249,7 +283,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                             }
 
                             (Err(_), Some(role))
-                                if !can_mention_role(ctx, role, &msg.member(ctx).await?)? =>
+                                if !msg.member(ctx).await?.can_mention_role(ctx, role)? =>
                             {
                                 bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name)
                             }
@@ -268,15 +302,9 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                             bail!("You do not have the \"Mention everyone, here, and All Roles\" permission required to use the role {}.", s);
                         }
 
-                        let everyone = discord_guild.members.values().map(|member| member.user.id);
-
                         match s.as_str() {
-                            "everyone" => HashSet::from_iter(everyone),
-                            "here" => HashSet::from_iter(everyone.filter(|id| {
-                                discord_guild.presences.get(id).is_some_and(|presence| {
-                                    presence.status != OnlineStatus::Offline
-                                })
-                            })),
+                            "everyone" => discord_guild.get_everyone(),
+                            "here" => discord_guild.get_here(),
                             _ => panic!("This will never happen"),
                         }
                     } else {
@@ -308,7 +336,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
 
                         match (possible_members.get(0), possible_roles.get(0)) {
                             (Some(_), Some(_)) => bail!(
-                                "Found a member and role with the same name. Use their ID instead."
+                                "Found a member and role with the same name in your query for {}. Use their ID instead.", s
                             ),
 
                             (Some((_, member)), None) => {
@@ -316,7 +344,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                             }
 
                             (None, Some((_, role)))
-                                if !can_mention_role(ctx, role, &msg.member(ctx).await?)? =>
+                                if !msg.member(ctx).await?.can_mention_role(ctx, role)? =>
                             {
                                 bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name);
                             }
@@ -370,28 +398,8 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
 
         // A hashmap of every role in the guild and its members.
         let mut roles_and_their_members: HashMap<RoleThing, HashSet<UserId>> = HashMap::from([
-            (
-                RoleThing::Everyone,
-                discord_guild
-                    .members
-                    .values()
-                    .map(|v| v.user.id)
-                    .collect::<HashSet<_>>(),
-            ),
-            (
-                RoleThing::Here,
-                discord_guild
-                    .members
-                    .values()
-                    .filter(|v| {
-                        discord_guild
-                            .presences
-                            .get(&v.user.id)
-                            .is_some_and(|p| p.status != OnlineStatus::Offline)
-                    })
-                    .map(|v| v.user.id)
-                    .collect::<HashSet<_>>(),
-            ),
+            (RoleThing::Everyone, discord_guild.get_everyone()),
+            (RoleThing::Here, discord_guild.get_here()),
         ]);
 
         for member in discord_guild.members.values() {
