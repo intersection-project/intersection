@@ -189,8 +189,6 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             return Ok(());
         };
 
-        let discord_guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
-
         /// Walk over the [Expr] type and reduce it into a set of user IDs that
         /// need to be mentioned
         #[async_recursion]
@@ -313,6 +311,8 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 return Ok(());
             }
         };
+
+        let discord_guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
 
         // Now that we know which members we have to notify, we can do some specialized calculations
         // to try to replace members in that set with existing roles in the server. First, we choose our
