@@ -2,7 +2,7 @@ use crate::schema::guilds;
 use diesel::prelude::*;
 
 #[derive(Queryable, Debug)]
-pub struct Guild {
+pub struct GuildDBData {
     pub id: String,
     pub prefix: String,
 }

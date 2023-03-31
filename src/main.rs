@@ -23,7 +23,7 @@ use diesel::{
 };
 use dotenvy::dotenv;
 use drql::ast;
-use models::Guild;
+use models::GuildDBData;
 use serenity::{async_trait, model::prelude::*, prelude::*};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -37,26 +37,25 @@ impl TypeMapKey for DB {
     type Value = Pool<ConnectionManager<SqliteConnection>>;
 }
 
-#[derive(Debug, PartialEq)]
-pub enum ResolvedExpr {
-    Union(Box<ResolvedExpr>, Box<ResolvedExpr>),
-    Intersection(Box<ResolvedExpr>, Box<ResolvedExpr>),
-    Difference(Box<ResolvedExpr>, Box<ResolvedExpr>),
-
-    Everyone,
-    Here,
-    UserID(UserId),
-    RoleID(RoleId),
-}
-
 struct Handler;
 
 struct CommandExecution<'a> {
     ctx: &'a Context,
     msg: &'a Message,
-    guild: Guild,
+    guild: GuildDBData,
     command: &'a str,
     args: VecDeque<&'a str>,
+}
+
+/// Function to obtain all members in a role
+fn members_of_role(guild: &Guild, role: &Role) -> HashSet<UserId> {
+    let mut set = HashSet::new();
+    for member in guild.members.values() {
+        if member.roles.contains(&role.id) {
+            set.insert(member.user.id);
+        }
+    }
+    set
 }
 
 /// Function to fold an iterator of ASTs into one large union expression
@@ -184,35 +183,68 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             msg.reply(ctx, "Your message does not contain any DRQL queries to attempt to resolve").await?;
             return Ok(());
         };
+
+        /// Walk over the [Expr] type and reduce it into a set of user IDs that
+        /// need to be mentioned
         #[async_recursion]
-        async fn walk_node(
+        async fn walk_and_reduce_ast(
             msg: &Message,
             ctx: &Context,
             node: Expr,
-        ) -> anyhow::Result<ResolvedExpr> {
+        ) -> anyhow::Result<HashSet<UserId>> {
             Ok(match node {
-                Expr::Difference(left, right) => ResolvedExpr::Difference(
-                    Box::new(walk_node(msg, ctx, *left).await?),
-                    Box::new(walk_node(msg, ctx, *right).await?),
-                ),
-                Expr::Intersection(left, right) => ResolvedExpr::Intersection(
-                    Box::new(walk_node(msg, ctx, *left).await?),
-                    Box::new(walk_node(msg, ctx, *right).await?),
-                ),
-                Expr::Union(left, right) => ResolvedExpr::Union(
-                    Box::new(walk_node(msg, ctx, *left).await?),
-                    Box::new(walk_node(msg, ctx, *right).await?),
-                ),
-                Expr::RoleID(id) => ResolvedExpr::RoleID(id),
-                Expr::UserID(id) => ResolvedExpr::UserID(id),
+                Expr::Difference(left, right) => walk_and_reduce_ast(msg, ctx, *left)
+                    .await?
+                    .difference(&walk_and_reduce_ast(msg, ctx, *right).await?)
+                    .copied()
+                    .collect::<HashSet<_>>(),
+                Expr::Intersection(left, right) => walk_and_reduce_ast(msg, ctx, *left)
+                    .await?
+                    .intersection(&walk_and_reduce_ast(msg, ctx, *right).await?)
+                    .copied()
+                    .collect::<HashSet<_>>(),
+                Expr::Union(left, right) => walk_and_reduce_ast(msg, ctx, *left)
+                    .await?
+                    .union(&walk_and_reduce_ast(msg, ctx, *right).await?)
+                    .copied()
+                    .collect::<HashSet<_>>(),
+                Expr::UserID(id) => {
+                    let mut set = HashSet::new();
+                    set.insert(id);
+                    set
+                }
+                Expr::RoleID(id) => {
+                    if id.to_string()
+                        == msg
+                            .guild_id
+                            .ok_or(anyhow!("Unable to resolve guild"))?
+                            .to_string()
+                    {
+                        walk_and_reduce_ast(msg, ctx, Expr::StringLiteral("everyone".to_string()))
+                            .await?
+                    } else {
+                        let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
+                        let role = guild
+                            .roles
+                            .get(&id)
+                            .ok_or(anyhow!("Unable to resolve role"))?;
+                        members_of_role(&guild, role)
+                    }
+                }
                 Expr::UnknownID(id) => {
-                    if Some(id.clone()) == msg.guild_id.map(|id| id.to_string()) {
-                        ResolvedExpr::Everyone
+                    if id
+                        == msg
+                            .guild_id
+                            .map(|id| id.to_string())
+                            .ok_or(anyhow!("Unable to resolve guild"))?
+                    {
+                        walk_and_reduce_ast(msg, ctx, Expr::StringLiteral("everyone".to_string()))
+                            .await?
                     } else {
                         let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
                         let possible_member = guild.member(ctx, id.parse::<u64>()?).await;
                         if let Ok(member) = possible_member {
-                            ResolvedExpr::UserID(member.user.id)
+                            walk_and_reduce_ast(msg, ctx, Expr::UserID(member.user.id)).await?
                         } else {
                             let possible_role = guild.roles.get(&RoleId::from(id.parse::<u64>()?));
                             if let Some(role) = possible_role {
@@ -221,7 +253,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                                 {
                                     anyhow::bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name);
                                 }
-                                ResolvedExpr::RoleID(role.id)
+                                walk_and_reduce_ast(msg, ctx, Expr::RoleID(role.id)).await?
                             } else {
                                 anyhow::bail!("Unable to resolve role or member ID: {}", id);
                             }
@@ -229,18 +261,32 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                     }
                 }
                 Expr::StringLiteral(s) => {
+                    let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
                     if s == "everyone" {
                         if !msg.member(ctx).await?.permissions(ctx)?.mention_everyone() {
                             anyhow::bail!("You do not have the \"Mention everyone, here, and All Roles\" permission required to use the role everyone.");
                         }
-                        ResolvedExpr::Everyone
+
+                        let mut set = HashSet::new();
+                        for member in guild.members.values() {
+                            set.insert(member.user.id);
+                        }
+                        set
                     } else if s == "here" {
                         if !msg.member(ctx).await?.permissions(ctx)?.mention_everyone() {
                             anyhow::bail!("You do not have the \"Mention everyone, here, and All Roles\" permission required to use the role here.");
                         }
-                        ResolvedExpr::Here
+
+                        let mut set = HashSet::new();
+                        for member in guild.members.values() {
+                            if let Some(presence) = guild.presences.get(&member.user.id) {
+                                if presence.status != OnlineStatus::Offline {
+                                    set.insert(member.user.id);
+                                }
+                            }
+                        }
+                        set
                     } else {
-                        let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
                         if let Some((_, role)) = guild
                             .roles
                             .iter()
@@ -251,13 +297,13 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                             {
                                 anyhow::bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name);
                             }
-                            ResolvedExpr::RoleID(role.id)
+                            walk_and_reduce_ast(msg, ctx, Expr::RoleID(role.id)).await?
                         } else if let Some((_, member)) = guild
                             .members // FIXME: what if the members aren't cached?
                             .iter()
                             .find(|(_, value)| value.user.tag().to_lowercase() == s.to_lowercase())
                         {
-                            ResolvedExpr::UserID(member.user.id)
+                            walk_and_reduce_ast(msg, ctx, Expr::UserID(member.user.id)).await?
                         } else {
                             anyhow::bail!(
                             "Unable to resolve role or member **username** (use a tag like \"User#1234\" and no nickname!): {}",
@@ -268,82 +314,15 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 }
             })
         }
-        let ast = match walk_node(msg, ctx, ast).await {
-            Ok(ast) => ast,
-            Err(e) => {
-                msg.reply(ctx, format!("Error resolving: {}", e)).await?;
-                return Ok(());
-            }
-        };
 
-        // Walk over the AST one more time and resolve stuff to the final output
-        #[async_recursion]
-        async fn reduce_ast(
-            msg: &Message,
-            ctx: &Context,
-            node: ResolvedExpr,
-        ) -> anyhow::Result<HashSet<UserId>> {
-            Ok(match node {
-                ResolvedExpr::Difference(left, right) => reduce_ast(msg, ctx, *left)
-                    .await?
-                    .difference(&reduce_ast(msg, ctx, *right).await?)
-                    .copied()
-                    .collect::<HashSet<_>>(),
-                ResolvedExpr::Union(left, right) => reduce_ast(msg, ctx, *left)
-                    .await?
-                    .union(&reduce_ast(msg, ctx, *right).await?)
-                    .copied()
-                    .collect::<HashSet<_>>(),
-                ResolvedExpr::Intersection(left, right) => reduce_ast(msg, ctx, *left)
-                    .await?
-                    .intersection(&reduce_ast(msg, ctx, *right).await?)
-                    .copied()
-                    .collect::<HashSet<_>>(),
-                ResolvedExpr::UserID(id) => {
-                    let mut set = HashSet::new();
-                    set.insert(id);
-                    set
-                }
-                ResolvedExpr::RoleID(id) => {
-                    let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
-                    let role = guild
-                        .roles
-                        .get(&id)
-                        .ok_or(anyhow!("Unable to resolve role"))?;
-                    let mut set = HashSet::new();
-                    for member in guild.members.values() {
-                        if member.roles.contains(&role.id) {
-                            set.insert(member.user.id);
-                        }
-                    }
-                    set
-                }
-                ResolvedExpr::Everyone => {
-                    let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
-                    let mut set = HashSet::new();
-                    for member in guild.members.values() {
-                        set.insert(member.user.id);
-                    }
-                    set
-                }
-                ResolvedExpr::Here => {
-                    let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
-                    let mut set = HashSet::new();
-                    for member in guild.members.values() {
-                        if let Some(presence) = guild.presences.get(&member.user.id) {
-                            if presence.status != OnlineStatus::Offline {
-                                set.insert(member.user.id);
-                            }
-                        }
-                    }
-                    set
-                }
-            })
-        }
-        let members_to_ping = match reduce_ast(msg, ctx, ast).await {
+        let members_to_ping = match walk_and_reduce_ast(msg, ctx, ast).await {
             Ok(ast) => ast,
             Err(e) => {
-                msg.reply(ctx, format!("Error reducing: {}", e)).await?;
+                msg.reply(
+                    ctx,
+                    format!("An error occurred while calculating the result: {}", e),
+                )
+                .await?;
                 return Ok(());
             }
         };
@@ -488,7 +467,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
 }
 
 /// Obtain a [Guild] instance
-async fn obtain_guild(ctx: &Context, guild_id: &str) -> anyhow::Result<Guild> {
+async fn obtain_guild(ctx: &Context, guild_id: &str) -> anyhow::Result<GuildDBData> {
     use schema::guilds::dsl::*;
 
     let mut conn = ctx
@@ -500,7 +479,10 @@ async fn obtain_guild(ctx: &Context, guild_id: &str) -> anyhow::Result<Guild> {
         .get()?;
 
     Ok(
-        match guilds.filter(id.eq(guild_id)).first::<Guild>(&mut conn) {
+        match guilds
+            .filter(id.eq(guild_id))
+            .first::<GuildDBData>(&mut conn)
+        {
             Ok(guild) => guild,
             Err(NotFound) => {
                 let new_guild = NewGuild {
@@ -513,7 +495,9 @@ async fn obtain_guild(ctx: &Context, guild_id: &str) -> anyhow::Result<Guild> {
                     .execute(&mut conn)?;
 
                 // Re-do the query now that we have inserted
-                guilds.filter(id.eq(guild_id)).first::<Guild>(&mut conn)?
+                guilds
+                    .filter(id.eq(guild_id))
+                    .first::<GuildDBData>(&mut conn)?
             }
             Err(e) => return Err(e.into()),
         },
@@ -583,10 +567,7 @@ impl EventHandler for Handler {
             if let Err(e2) = msg
                 .reply(
                     ctx,
-                    format!(
-                        "An internal error occurred while processing your command: {}",
-                        e
-                    ),
+                    format!("An error occurred while processing your command: {}", e),
                 )
                 .await
             {
