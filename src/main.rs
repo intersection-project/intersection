@@ -381,23 +381,17 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
         // Now we remove redundant qualifiers. This is done by iterating over each one and determining
         // if one of the other values in it is a superset of itself, if so, it's redundant and can be
         // removed.
-        let mut new_qualifiers: HashMap<&RoleThing, &HashSet<UserId>> = HashMap::new();
-        for (k, value) in &qualifiers {
-            let mut has_superset = false;
-            for (k2, other) in &qualifiers {
-                if k == k2 {
-                    continue;
-                }
-
-                if other.is_superset(value) {
-                    has_superset = true;
-                    break;
-                }
-            }
-            if !has_superset {
-                new_qualifiers.insert(k, value);
-            }
-        }
+        let new_qualifiers: HashMap<&RoleThing, &HashSet<UserId>> = qualifiers
+            .iter()
+            .map(|(&a, &b)| (a, b)) // TODO: Is there a way to do this without copying?
+            .filter(|(key, value)| {
+                // Filter out any values in qualifiers with a superset also within qualifiers.
+                !(qualifiers.iter().any(|(other_key, other_value)| {
+                    // But don't count ourself
+                    key != other_key && other_value.is_superset(value)
+                }))
+            })
+            .collect::<HashMap<_, _>>();
 
         // Now that new_qualifiers holds the roles that we plan on pinging, we determine our outliers.
         let included_members: HashSet<UserId> = qualifiers
