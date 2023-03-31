@@ -403,7 +403,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
         let included_members: HashSet<UserId> = qualifiers
             .into_values()
             .flatten()
-            .copied()
+            .copied() // TODO: is there a way to not copy here? the problem is .difference won't work with iterator over T vs &T,
             .collect::<HashSet<_>>();
 
         let outliers = members_to_ping.difference(&included_members);
