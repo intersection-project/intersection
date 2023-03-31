@@ -333,35 +333,36 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 }
             }
         }
-        let mut roles_and_their_members: HashMap<RoleThing, RwLock<HashSet<UserId>>> =
-            HashMap::new();
 
-        roles_and_their_members.insert(
-            RoleThing::Everyone,
-            RwLock::new(
-                discord_guild
-                    .members
-                    .values()
-                    .map(|v| v.user.id)
-                    .collect::<HashSet<_>>(),
-            ),
-        );
-        roles_and_their_members.insert(
-            RoleThing::Here,
-            RwLock::new(
-                discord_guild
-                    .members
-                    .values()
-                    .filter(|v| {
+        let mut roles_and_their_members: HashMap<RoleThing, RwLock<HashSet<UserId>>> =
+            HashMap::from([
+                (
+                    RoleThing::Everyone,
+                    RwLock::new(
                         discord_guild
-                            .presences
-                            .get(&v.user.id)
-                            .is_some_and(|p| p.status != OnlineStatus::Offline)
-                    })
-                    .map(|v| v.user.id)
-                    .collect::<HashSet<_>>(),
-            ),
-        );
+                            .members
+                            .values()
+                            .map(|v| v.user.id)
+                            .collect::<HashSet<_>>(),
+                    ),
+                ),
+                (
+                    RoleThing::Here,
+                    RwLock::new(
+                        discord_guild
+                            .members
+                            .values()
+                            .filter(|v| {
+                                discord_guild
+                                    .presences
+                                    .get(&v.user.id)
+                                    .is_some_and(|p| p.status != OnlineStatus::Offline)
+                            })
+                            .map(|v| v.user.id)
+                            .collect::<HashSet<_>>(),
+                    ),
+                ),
+            ]);
 
         for member in discord_guild.members.values() {
             for role in member.roles(ctx).ok_or(anyhow!("No role data??"))? {
