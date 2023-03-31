@@ -334,53 +334,38 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             }
         }
 
-        let mut roles_and_their_members: HashMap<RoleThing, RwLock<HashSet<UserId>>> =
-            HashMap::from([
-                (
-                    RoleThing::Everyone,
-                    RwLock::new(
+        let mut roles_and_their_members: HashMap<RoleThing, HashSet<UserId>> = HashMap::from([
+            (
+                RoleThing::Everyone,
+                discord_guild
+                    .members
+                    .values()
+                    .map(|v| v.user.id)
+                    .collect::<HashSet<_>>(),
+            ),
+            (
+                RoleThing::Here,
+                discord_guild
+                    .members
+                    .values()
+                    .filter(|v| {
                         discord_guild
-                            .members
-                            .values()
-                            .map(|v| v.user.id)
-                            .collect::<HashSet<_>>(),
-                    ),
-                ),
-                (
-                    RoleThing::Here,
-                    RwLock::new(
-                        discord_guild
-                            .members
-                            .values()
-                            .filter(|v| {
-                                discord_guild
-                                    .presences
-                                    .get(&v.user.id)
-                                    .is_some_and(|p| p.status != OnlineStatus::Offline)
-                            })
-                            .map(|v| v.user.id)
-                            .collect::<HashSet<_>>(),
-                    ),
-                ),
-            ]);
+                            .presences
+                            .get(&v.user.id)
+                            .is_some_and(|p| p.status != OnlineStatus::Offline)
+                    })
+                    .map(|v| v.user.id)
+                    .collect::<HashSet<_>>(),
+            ),
+        ]);
 
         for member in discord_guild.members.values() {
             for role in member.roles(ctx).ok_or(anyhow!("No role data??"))? {
-                if roles_and_their_members
-                    .get(&RoleThing::Id(role.id))
-                    .is_some()
-                {
-                    roles_and_their_members
-                        .get(&RoleThing::Id(role.id))
-                        .ok_or(anyhow!("This should never happen"))?
-                        .write()
-                        .await
-                        .insert(member.user.id);
+                if let Some(entry) = roles_and_their_members.get_mut(&RoleThing::Id(role.id)) {
+                    entry.insert(member.user.id);
                 } else {
-                    roles_and_their_members.insert(
-                        RoleThing::Id(role.id),
-                        RwLock::new(HashSet::from([member.user.id])),
-                    );
+                    roles_and_their_members
+                        .insert(RoleThing::Id(role.id), HashSet::from([member.user.id]));
                 }
             }
         }
@@ -388,19 +373,17 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
         // roles_and_their_members is now a hashmap from role ids to their members. with this, we
         // can now iterate over every role and see if it's a subset of our target. if so, we add
         // it to the qualifiers list.
-        let mut qualifiers: HashMap<RoleThing, RwLock<HashSet<UserId>>> = HashMap::new();
-        for (id, members_lock) in &roles_and_their_members {
-            let members = members_lock.read().await;
+        let mut qualifiers: HashMap<&RoleThing, &HashSet<UserId>> = HashMap::new();
+        for (id, members) in &roles_and_their_members {
             if members.is_subset(&members_to_ping) {
-                // FIXME: This is very ugly and probably slow
-                qualifiers.insert((*id).clone(), RwLock::new(members.clone()));
+                qualifiers.insert(id, members);
             }
         }
 
         // Now we take the union of all qualifiers and subtract that from the target to obtain any outliers.
         let mut included_members: HashSet<UserId> = HashSet::new();
-        for members_lock in qualifiers.values() {
-            for member in members_lock.read().await.iter() {
+        for members in qualifiers.values() {
+            for member in members.iter() {
                 included_members.insert(*member);
             }
         }
@@ -410,23 +393,21 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
         // Now we remove redundant qualifiers. This is done by iterating over each one and determining
         // if one of the other values in it is a superset of itself, if so, it's redundant and can be
         // removed.
-        let mut new_qualifiers: HashMap<RoleThing, RwLock<HashSet<UserId>>> = HashMap::new();
-        for (k, v) in &qualifiers {
-            let value = v.read().await;
+        let mut new_qualifiers: HashMap<&RoleThing, &HashSet<UserId>> = HashMap::new();
+        for (k, value) in &qualifiers {
             let mut has_superset = false;
-            for (k2, v2) in &qualifiers {
+            for (k2, other) in &qualifiers {
                 if k == k2 {
                     continue;
                 }
 
-                let other = v2.read().await;
                 if other.is_superset(&value) {
                     has_superset = true;
                     break;
                 }
             }
             if !has_superset {
-                new_qualifiers.insert((*k).clone(), RwLock::new(value.clone()));
+                new_qualifiers.insert(k, value);
             }
         }
 
