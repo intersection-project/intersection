@@ -225,6 +225,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                             .roles
                             .get(&id)
                             .ok_or(anyhow!("Unable to resolve role"))?;
+
                         members_of_role(&discord_guild, role)
                     }
                 }
@@ -233,68 +234,86 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                         walk_and_reduce_ast(msg, ctx, Expr::StringLiteral("everyone".to_string()))
                             .await?
                     } else {
-                        let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
-                        let possible_member = guild.member(ctx, id.parse::<u64>()?).await;
-                        if let Ok(member) = possible_member {
-                            walk_and_reduce_ast(msg, ctx, Expr::UserID(member.user.id)).await?
-                        } else {
-                            let possible_role = guild.roles.get(&RoleId::from(id.parse::<u64>()?));
-                            if let Some(role) = possible_role {
-                                if !can_mention_role(ctx, role, &msg.member(ctx).await?)? {
-                                    bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name);
-                                }
-                                walk_and_reduce_ast(msg, ctx, Expr::RoleID(role.id)).await?
-                            } else {
-                                bail!("Unable to resolve role or member ID: {}", id);
+                        let possible_member = discord_guild.member(ctx, id.parse::<u64>()?).await;
+                        let possible_role =
+                            discord_guild.roles.get(&RoleId::from(id.parse::<u64>()?));
+
+                        match (possible_member, possible_role) {
+                            (Ok(_), Some(_)) => bail!(
+                                "Somehow there was both a member and a role with the ID {}??",
+                                id
+                            ),
+
+                            (Ok(member), None) => {
+                                walk_and_reduce_ast(msg, ctx, Expr::UserID(member.user.id)).await?
                             }
+
+                            (Err(_), Some(role))
+                                if !can_mention_role(ctx, role, &msg.member(ctx).await?)? =>
+                            {
+                                bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name)
+                            }
+
+                            (Err(_), Some(role)) => {
+                                walk_and_reduce_ast(msg, ctx, Expr::RoleID(role.id)).await?
+                            }
+
+                            (Err(_), None) => bail!("Unable to resolve role or member ID: {}", id),
                         }
                     }
                 }
                 Expr::StringLiteral(s) => {
-                    if s == "everyone" {
+                    if s == "everyone" || s == "here" {
                         if !msg.member(ctx).await?.permissions(ctx)?.mention_everyone() {
-                            bail!("You do not have the \"Mention everyone, here, and All Roles\" permission required to use the role everyone.");
+                            bail!("You do not have the \"Mention everyone, here, and All Roles\" permission required to use the role {}.", s);
                         }
 
-                        HashSet::from_iter(
-                            discord_guild.members.values().map(|member| member.user.id),
-                        )
-                    } else if s == "here" {
-                        if !msg.member(ctx).await?.permissions(ctx)?.mention_everyone() {
-                            bail!("You do not have the \"Mention everyone, here, and All Roles\" permission required to use the role here.");
-                        }
+                        let everyone = discord_guild.members.values().map(|member| member.user.id);
 
-                        HashSet::from_iter(
-                            discord_guild
-                                .members
-                                .values()
-                                .filter(|member| {
-                                    discord_guild.presences.get(&member.user.id).is_some_and(
-                                        |presence| presence.status != OnlineStatus::Offline,
-                                    )
+                        match s.as_str() {
+                            "everyone" => HashSet::from_iter(everyone),
+                            "here" => HashSet::from_iter(everyone.filter(|id| {
+                                discord_guild.presences.get(id).is_some_and(|presence| {
+                                    presence.status != OnlineStatus::Offline
                                 })
-                                .map(|member| member.user.id),
-                        )
-                    } else if let Some((_, role)) = discord_guild
-                        .roles
-                        .iter()
-                        .find(|(_, value)| value.name.to_lowercase() == s.to_lowercase())
-                    {
-                        if !can_mention_role(ctx, role, &msg.member(ctx).await?)? {
-                            bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name);
+                            })),
+                            _ => panic!("This will never happen"),
                         }
-                        walk_and_reduce_ast(msg, ctx, Expr::RoleID(role.id)).await?
-                    } else if let Some((_, member)) = discord_guild
-                        .members // FIXME: what if the members aren't cached?
-                        .iter()
-                        .find(|(_, value)| value.user.tag().to_lowercase() == s.to_lowercase())
-                    {
-                        walk_and_reduce_ast(msg, ctx, Expr::UserID(member.user.id)).await?
                     } else {
-                        bail!(
-                        "Unable to resolve role or member **username** (use a tag like \"User#1234\" and no nickname!): {}",
-                        s
-                    );
+                        let possible_member = discord_guild
+                            .members // FIXME: what if the members aren't cached?
+                            .iter()
+                            .find(|(_, member)| {
+                                member.user.tag().to_lowercase() == s.to_lowercase()
+                            });
+                        let possible_role = discord_guild
+                            .roles
+                            .iter()
+                            .find(|(_, role)| role.name.to_lowercase() == s.to_lowercase());
+
+                        match (possible_member, possible_role) {
+                            (Some(_), Some(_)) => bail!(
+                                "Found a member and role with the same name. Use their ID instead."
+                            ),
+
+                            (Some((_, member)), None) => {
+                                walk_and_reduce_ast(msg, ctx, Expr::UserID(member.user.id)).await?
+                            }
+
+                            (None, Some((_, role)))
+                                if !can_mention_role(ctx, role, &msg.member(ctx).await?)? =>
+                            {
+                                bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name);
+                            }
+
+                            (None, Some((_, role))) => {
+                                walk_and_reduce_ast(msg, ctx, Expr::RoleID(role.id)).await?
+                            }
+
+                            (None, None) => {
+                                bail!("Unable to resolve role or member **username** (use a tag like \"User#1234\" and no nickname!): {}", s);
+                            }
+                        }
                     }
                 }
             })
