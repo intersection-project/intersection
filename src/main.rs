@@ -63,6 +63,11 @@ fn reduce_ast_chunks(iter: impl Iterator<Item = ast::Expr>) -> Option<ast::Expr>
     iter.reduce(|acc, chunk| ast::Expr::Union(Box::new(acc), Box::new(chunk)))
 }
 
+/// Determine if a user can mention a given role
+fn can_mention_role(ctx: &Context, role: &Role, member: &Member) -> anyhow::Result<bool> {
+    Ok(role.mentionable || (member.permissions(ctx)?.mention_everyone()))
+}
+
 /// Function called whenever a **message-based command** is triggered.
 async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
     let CommandExecution {
@@ -244,9 +249,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                         } else {
                             let possible_role = guild.roles.get(&RoleId::from(id.parse::<u64>()?));
                             if let Some(role) = possible_role {
-                                if !role.mentionable
-                                    && msg.member(ctx).await?.permissions(ctx)?.mention_everyone()
-                                {
+                                if !can_mention_role(ctx, role, &msg.member(ctx).await?)? {
                                     anyhow::bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name);
                                 }
                                 walk_and_reduce_ast(msg, ctx, Expr::RoleID(role.id)).await?
@@ -288,9 +291,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                         .iter()
                         .find(|(_, value)| value.name.to_lowercase() == s.to_lowercase())
                     {
-                        if !role.mentionable
-                            && msg.member(ctx).await?.permissions(ctx)?.mention_everyone()
-                        {
+                        if !can_mention_role(ctx, role, &msg.member(ctx).await?)? {
                             anyhow::bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name);
                         }
                         walk_and_reduce_ast(msg, ctx, Expr::RoleID(role.id)).await?
