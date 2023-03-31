@@ -371,7 +371,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 {
                     roles_and_their_members
                         .get(&RoleThing::Id(role.id))
-                        .ok_or(anyhow!("E"))?
+                        .ok_or(anyhow!("This should never happen"))?
                         .write()
                         .await
                         .insert(member.user.id);
