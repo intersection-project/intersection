@@ -73,7 +73,9 @@ trait CustomMemberImpl {
 }
 impl CustomMemberImpl for Member {
     fn can_mention_role(&self, ctx: &Context, role: &Role) -> anyhow::Result<bool> {
-        Ok(role.mentionable || (self.permissions(ctx)?.mention_everyone()))
+        Ok(role.mentionable
+            || (self.permissions(ctx)?.mention_everyone())
+            || (self.permissions(ctx)?.administrator()))
     }
 }
 
