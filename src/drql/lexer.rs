@@ -8,7 +8,7 @@ pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
 pub enum LexicalError {
     #[default]
     NoMatchingRule,
-    IDK((usize, char), String),
+    UnknownToken((usize, char), String),
     UnterminatedStringLiteral(usize),
     ParseIntError(ParseIntError),
 }
@@ -94,7 +94,7 @@ impl<'input> Iterator for DrqlLexer<'input> {
         match token {
             Err(LexicalError::NoMatchingRule) => {
                 let char = slice.chars().next().unwrap();
-                Some(Err(LexicalError::IDK(
+                Some(Err(LexicalError::UnknownToken(
                     (span.start, char),
                     format!("Internal error: Unknown token '{char}'"),
                 )))
@@ -132,7 +132,7 @@ mod tests {
             results,
             vec![
                 Ok((0, Tok::RawName("a".to_string()), 1)),
-                Err(LexicalError::IDK(
+                Err(LexicalError::UnknownToken(
                     (2, '#'),
                     "Internal error: Unknown token '#'".to_string()
                 )),
