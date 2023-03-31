@@ -280,18 +280,33 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                             _ => panic!("This will never happen"),
                         }
                     } else {
-                        let possible_member = discord_guild
+                        let possible_members = discord_guild
                             .members // FIXME: what if the members aren't cached?
                             .iter()
-                            .find(|(_, member)| {
+                            .filter(|(_, member)| {
                                 member.user.tag().to_lowercase() == s.to_lowercase()
-                            });
-                        let possible_role = discord_guild
+                            })
+                            .collect::<Vec<_>>();
+                        let possible_roles = discord_guild
                             .roles
                             .iter()
-                            .find(|(_, role)| role.name.to_lowercase() == s.to_lowercase());
+                            .filter(|(_, role)| role.name.to_lowercase() == s.to_lowercase())
+                            .collect::<Vec<_>>();
 
-                        match (possible_member, possible_role) {
+                        if possible_members.len() > 1 {
+                            bail!(
+                                "Multiple members matched your query for {}. Use their ID instead.",
+                                s
+                            );
+                        }
+                        if possible_members.len() > 1 {
+                            bail!(
+                                "Multiple roles matched your query for {}. Use their ID instead.",
+                                s
+                            );
+                        }
+
+                        match (possible_members.get(0), possible_roles.get(0)) {
                             (Some(_), Some(_)) => bail!(
                                 "Found a member and role with the same name. Use their ID instead."
                             ),
