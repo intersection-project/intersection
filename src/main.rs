@@ -1,4 +1,5 @@
 #![feature(is_some_and)]
+#![feature(never_type)]
 
 mod drql;
 mod drql_reducer;

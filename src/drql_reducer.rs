@@ -8,6 +8,34 @@ pub enum ReducerOp<User> {
     User(User),
 }
 
+/// Takes a [ReducerOp] and a function that takes the user-defined type and iterates over every
+/// value within it, and returns a [Future] that resolves to a [HashSet] of the values after
+/// calculating them as a set. This is best explained with an example:
+///
+/// ```
+/// use drql_reducer::{ReducerOp, run_reducers};
+///
+/// let tree = ReducerOp::Union(
+///     Box::new(ReducerOp::User(HashSet::from([1]))),
+///     Box::new(ReducerOp::Difference(
+///         Box::new(ReducerOp::User(HashSet::from([2, 3, 4]))),
+///         Box::new(ReducerOp::User(HashSet::from([3]))),
+///     )),
+/// );
+///
+/// struct UserData;
+///
+/// async fn f(input: HashSet<u32>, _: &UserData) -> Result<HashSet<u32>, !> {
+///     Ok(input)
+/// }
+///
+/// assert_eq!(
+///     run_reducers(tree, &f, &UserData).await,
+///     Ok(HashSet::from([1, 2, 4])
+/// );
+/// ```
+///
+/// The "user data" is passed into `f` for all calls.
 #[async_recursion]
 pub async fn run_reducers<'user_data, User, Output, F, FnFut, UserData, E>(
     node: ReducerOp<User>,
@@ -15,7 +43,7 @@ pub async fn run_reducers<'user_data, User, Output, F, FnFut, UserData, E>(
     data: &'user_data UserData,
 ) -> Result<HashSet<Output>, E>
 where
-    User: Eq + Hash + Send + Sync,
+    User: Send + Sync,
     F: Fn(User, &'user_data UserData) -> FnFut + Send + Sync,
     FnFut: Future<Output = Result<HashSet<Output>, E>> + Send,
     UserData: 'user_data + Send + Sync,
@@ -40,4 +68,31 @@ where
             .collect::<HashSet<_>>(),
         ReducerOp::User(u) => f(u, data).await?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn reducers_work_as_expected() {
+        let tree = ReducerOp::Union(
+            Box::new(ReducerOp::User(HashSet::from([1]))),
+            Box::new(ReducerOp::Difference(
+                Box::new(ReducerOp::User(HashSet::from([2, 3, 4]))),
+                Box::new(ReducerOp::User(HashSet::from([3]))),
+            )),
+        );
+
+        struct UserData;
+
+        async fn f(input: HashSet<u32>, _: &UserData) -> Result<HashSet<u32>, !> {
+            Ok(input)
+        }
+
+        assert_eq!(
+            run_reducers(tree, &f, &UserData).await,
+            Ok(HashSet::from([1, 2, 4]))
+        );
+    }
 }
