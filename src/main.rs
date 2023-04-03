@@ -47,7 +47,7 @@ struct CommandExecution<'a> {
     args: VecDeque<&'a str>,
 }
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Clone)]
 enum RoleType {
     Everyone,
     Here,
@@ -58,9 +58,44 @@ impl Display for RoleType {
         match self {
             RoleType::Everyone => write!(f, "@everyone"),
             RoleType::Here => write!(f, "@here"),
-            RoleType::Id(id) => write!(f, "<@{}>", id),
+            RoleType::Id(id) => write!(f, "<@&{}>", id),
         }
     }
+}
+
+// Create a function chunk_str_vec_into_max_size that takes 3 parameters. The first parameter, 'input'
+// is a vector of strings. The second parameter, sep, is a separator. The third parameter, 'size' is
+// the maximum size to create. The function should return a vector of strings, where each element in
+// the result vector is as many elements from the input vector as possible, without going over the
+// size limit. For example, given an input of ["abc", "def", "ghi", "jkl", "mno"] and a limit of 7,
+// return ["abc def", "ghi jkl", "mno"].
+// Errors when a chunk len()>size.
+fn chunk_str_vec_into_max_size(
+    mut input: Vec<String>,
+    sep: &str,
+    size: usize,
+) -> anyhow::Result<Vec<String>> {
+    input.reverse();
+    let mut result = Vec::new();
+    let mut current = String::new();
+    while let Some(next) = input.pop() {
+        if next.len() > size {
+            bail!("Chunk of length {} too large for size {}", next.len(), size);
+        }
+        if current.len() + next.len() + sep.len() > size as usize {
+            result.push(current);
+            current = next;
+        } else {
+            if !current.is_empty() {
+                current.push_str(sep);
+            }
+            current.push_str(&next);
+        }
+    }
+    if !current.is_empty() {
+        result.push(current);
+    }
+    Ok(result)
 }
 
 /// Function to fold an iterator of ASTs into one large union expression
@@ -441,24 +476,72 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             .copied() // TODO: is there a way to not copy here? the problem is .difference won't work with iterator over T vs &T,
             .collect::<HashSet<_>>();
 
-        let outliers = members_to_ping.difference(&included_members);
+        let outliers = members_to_ping
+            .difference(&included_members)
+            .collect::<HashSet<_>>();
 
-        msg.reply(
-            ctx,
-            format!(
-                "{} {}",
-                new_qualifiers
-                    .keys()
-                    .map(|k| k.to_string())
-                    .collect::<Vec<_>>()
-                    .join(" "),
-                outliers
-                    .map(|id| format!("<@{}>", id))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            ),
-        )
-        .await?;
+        // if members_to_ping.len() > 25 {
+        //     // TODO: Ask the user to confirm they wish to do this action
+        // }
+
+        // Now we need to split the output message into individual pings. First, stringify each user mention...
+        enum MentionType {
+            User(UserId),
+            Role(RoleType),
+        }
+        impl Display for MentionType {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match self {
+                    MentionType::User(id) => write!(f, "<@{}>", id),
+                    MentionType::Role(role) => write!(f, "{}", role),
+                }
+            }
+        }
+
+        // TODO: Once message splitting is complete this could result in a user being
+        // pinged multiple times if they are present in a role that is split into multiple
+        // messages.
+        // e.g.
+        // user is in @A and @C
+        // message 1: @A @B ...
+        // message 2: @C @D ...
+        // double ping!
+        let stringified_mentions = new_qualifiers
+            .into_keys()
+            .map(|x| MentionType::Role(x.clone()))
+            .chain(outliers.into_iter().map(|x| MentionType::User(*x)))
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>();
+
+        if stringified_mentions.is_empty() {
+            msg.reply(ctx, "No users matched.").await?;
+            return Ok(());
+        }
+
+        const NOTIFICATION_STRING: &str = "Notification triggered by Intersection.\n";
+
+        if stringified_mentions.join(" ").len() <= (2000 - NOTIFICATION_STRING.len()) {
+            msg.reply(
+                ctx,
+                format!("{}{}", NOTIFICATION_STRING, stringified_mentions.join(" ")),
+            )
+            .await?;
+        } else {
+            let messages = chunk_str_vec_into_max_size(stringified_mentions, " ", 2000)?;
+            msg.reply(
+                ctx,
+                format!(
+                    "Notification triggered by Intersection. Please wait, sending {} messages...",
+                    messages.len()
+                ),
+            )
+            .await?;
+            for message in messages {
+                msg.reply(ctx, message).await?;
+            }
+            msg.reply(ctx, "Notification triggered successfully.")
+                .await?;
+        }
     } else {
         msg.reply(ctx, "Unknown command.").await?;
     }
@@ -609,4 +692,63 @@ async fn main() -> Result<(), anyhow::Error> {
     client.start().await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chunk_str_vec_into_max_size_works() {
+        let result = chunk_str_vec_into_max_size(
+            vec![
+                "abc".to_string(),
+                "def".to_string(),
+                "ghi".to_string(),
+                "jkl".to_string(),
+                "mno".to_string(),
+            ],
+            " ",
+            7,
+        )
+        .unwrap();
+        assert_eq!(
+            result,
+            vec![
+                "abc def".to_string(),
+                "ghi jkl".to_string(),
+                "mno".to_string(),
+            ]
+        );
+
+        let result = chunk_str_vec_into_max_size(
+            ('A'..='Z').map(|l| l.to_string()).collect::<Vec<_>>(),
+            " ",
+            10,
+        )
+        .unwrap();
+        assert_eq!(
+            result,
+            vec![
+                "A B C D E".to_string(),
+                "F G H I J".to_string(),
+                "K L M N O".to_string(),
+                "P Q R S T".to_string(),
+                "U V W X Y".to_string(),
+                "Z".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn chunk_str_vec_into_max_size_has_overflow() {
+        println!(
+            "{:?}",
+            chunk_str_vec_into_max_size(vec!["ABCDEF".to_string()], " ", 5)
+        );
+        assert!(matches!(
+            chunk_str_vec_into_max_size(vec!["ABCDEF".to_string()], " ", 5),
+            Err(_)
+        ));
+    }
 }
