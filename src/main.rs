@@ -1,6 +1,7 @@
 #![feature(is_some_and)]
 
 mod drql;
+mod drql_reducer;
 mod models;
 mod schema;
 
@@ -13,7 +14,7 @@ lalrpop_mod!(
     parser
 );
 
-use crate::{drql::ast::Expr, models::NewGuild};
+use crate::{drql::ast::Expr, drql_reducer::ReducerOp, models::NewGuild};
 use anyhow::{anyhow, bail};
 use async_recursion::async_recursion;
 use diesel::{
@@ -29,7 +30,6 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     env,
     fmt::Display,
-    future::Future,
     hash::Hash,
 };
 
@@ -276,12 +276,6 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             return Ok(());
         };
 
-        enum ReducerOp<User> {
-            Difference(Box<ReducerOp<User>>, Box<ReducerOp<User>>),
-            Intersection(Box<ReducerOp<User>>, Box<ReducerOp<User>>),
-            Union(Box<ReducerOp<User>>, Box<ReducerOp<User>>),
-            User(User),
-        }
         #[derive(Clone, Debug, Eq, PartialEq, Hash)]
         enum DRQLValue {
             UserID(UserId),
@@ -307,40 +301,6 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                     Expr::StringLiteral(id) => ReducerOp::User(DRQLValue::StringLiteral(id)),
                 }
             }
-        }
-
-        #[async_recursion]
-        async fn run_reducers<'user_data, User, Output, F, FnFut, UserData, E>(
-            node: ReducerOp<User>,
-            f: &F,
-            data: &'user_data UserData,
-        ) -> Result<HashSet<Output>, E>
-        where
-            User: Eq + Hash + Send + Sync,
-            F: Fn(User, &'user_data UserData) -> FnFut + Send + Sync,
-            FnFut: Future<Output = Result<HashSet<Output>, E>> + Send,
-            UserData: 'user_data + Send + Sync,
-            Output: Eq + Hash + Copy + Send + Sync,
-            E: Send + Sync,
-        {
-            Ok(match node {
-                ReducerOp::Difference(l, r) => run_reducers(*l, f, data)
-                    .await?
-                    .difference(&run_reducers(*r, f, data).await?)
-                    .copied()
-                    .collect::<HashSet<_>>(),
-                ReducerOp::Intersection(l, r) => run_reducers(*l, f, data)
-                    .await?
-                    .intersection(&run_reducers(*r, f, data).await?)
-                    .copied()
-                    .collect::<HashSet<_>>(),
-                ReducerOp::Union(l, r) => run_reducers(*l, f, data)
-                    .await?
-                    .union(&run_reducers(*r, f, data).await?)
-                    .copied()
-                    .collect::<HashSet<_>>(),
-                ReducerOp::User(u) => f(u, data).await?,
-            })
         }
 
         /// Walk over the [Expr] type and reduce it into a set of user IDs that
@@ -517,7 +477,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 })
             }
 
-            run_reducers(node.into(), &resolver, &UserData { msg, ctx }).await
+            drql_reducer::run_reducers(node.into(), &resolver, &UserData { msg, ctx }).await
         }
 
         let members_to_ping = match walk_and_reduce_ast(msg, ctx, ast).await {
