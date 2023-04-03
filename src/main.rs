@@ -29,6 +29,8 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     env,
     fmt::Display,
+    future::Future,
+    hash::Hash,
 };
 
 struct DB;
@@ -269,9 +271,77 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 .collect::<Result<Vec<_>, _>>()?
                 .into_iter(),
         ) else {
-            msg.reply(ctx, "Your message does not contain any DRQL queries to attempt to resolve").await?;
+            msg.reply(ctx, "Your message does not contain any DRQL queries to attempt to resolve")
+            .await?;
             return Ok(());
         };
+
+        enum ReducerOp<User> {
+            Difference(Box<ReducerOp<User>>, Box<ReducerOp<User>>),
+            Intersection(Box<ReducerOp<User>>, Box<ReducerOp<User>>),
+            Union(Box<ReducerOp<User>>, Box<ReducerOp<User>>),
+            User(User),
+        }
+        #[derive(Clone, Debug, Eq, PartialEq, Hash)]
+        enum DRQLValue {
+            UserID(UserId),
+            RoleID(RoleId),
+            UnknownID(String),
+            StringLiteral(String),
+        }
+        impl From<Expr> for ReducerOp<DRQLValue> {
+            fn from(value: Expr) -> Self {
+                match value {
+                    Expr::Difference(l, r) => {
+                        ReducerOp::Difference(Box::new((*l).into()), Box::new((*r).into()))
+                    }
+                    Expr::Intersection(l, r) => {
+                        ReducerOp::Intersection(Box::new((*l).into()), Box::new((*r).into()))
+                    }
+                    Expr::Union(l, r) => {
+                        ReducerOp::Union(Box::new((*l).into()), Box::new((*r).into()))
+                    }
+                    Expr::RoleID(id) => ReducerOp::User(DRQLValue::RoleID(id)),
+                    Expr::UserID(id) => ReducerOp::User(DRQLValue::UserID(id)),
+                    Expr::UnknownID(id) => ReducerOp::User(DRQLValue::UnknownID(id)),
+                    Expr::StringLiteral(id) => ReducerOp::User(DRQLValue::StringLiteral(id)),
+                }
+            }
+        }
+
+        #[async_recursion]
+        async fn run_reducers<'user_data, User, Output, F, FnFut, UserData, E>(
+            node: ReducerOp<User>,
+            f: &F,
+            data: &'user_data UserData,
+        ) -> Result<HashSet<Output>, E>
+        where
+            User: Eq + Hash + Send + Sync,
+            F: Fn(User, &'user_data UserData) -> FnFut + Send + Sync,
+            FnFut: Future<Output = Result<HashSet<Output>, E>> + Send,
+            UserData: 'user_data + Send + Sync,
+            Output: Eq + Hash + Copy + Send + Sync,
+            E: Send + Sync,
+        {
+            Ok(match node {
+                ReducerOp::Difference(l, r) => run_reducers(*l, f, data)
+                    .await?
+                    .difference(&run_reducers(*r, f, data).await?)
+                    .copied()
+                    .collect::<HashSet<_>>(),
+                ReducerOp::Intersection(l, r) => run_reducers(*l, f, data)
+                    .await?
+                    .intersection(&run_reducers(*r, f, data).await?)
+                    .copied()
+                    .collect::<HashSet<_>>(),
+                ReducerOp::Union(l, r) => run_reducers(*l, f, data)
+                    .await?
+                    .union(&run_reducers(*r, f, data).await?)
+                    .copied()
+                    .collect::<HashSet<_>>(),
+                ReducerOp::User(u) => f(u, data).await?,
+            })
+        }
 
         /// Walk over the [Expr] type and reduce it into a set of user IDs that
         /// need to be mentioned
@@ -281,135 +351,173 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
             ctx: &Context,
             node: Expr,
         ) -> anyhow::Result<HashSet<UserId>> {
-            let discord_guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
+            #[derive(Clone)]
+            struct UserData<'a> {
+                msg: &'a Message,
+                ctx: &'a Context,
+            }
 
-            Ok(match node {
-                Expr::Difference(left, right) => walk_and_reduce_ast(msg, ctx, *left)
-                    .await?
-                    .difference(&walk_and_reduce_ast(msg, ctx, *right).await?)
-                    .copied()
-                    .collect::<HashSet<_>>(),
-                Expr::Intersection(left, right) => walk_and_reduce_ast(msg, ctx, *left)
-                    .await?
-                    .intersection(&walk_and_reduce_ast(msg, ctx, *right).await?)
-                    .copied()
-                    .collect::<HashSet<_>>(),
-                Expr::Union(left, right) => walk_and_reduce_ast(msg, ctx, *left)
-                    .await?
-                    .union(&walk_and_reduce_ast(msg, ctx, *right).await?)
-                    .copied()
-                    .collect::<HashSet<_>>(),
-                Expr::UserID(id) => HashSet::from([id]),
-                Expr::RoleID(id) => {
-                    if id.to_string() == discord_guild.id.to_string() {
-                        walk_and_reduce_ast(msg, ctx, Expr::StringLiteral("everyone".to_string()))
-                            .await?
-                    } else {
-                        let role = discord_guild
-                            .roles
-                            .get(&id)
-                            .ok_or(anyhow!("Unable to resolve role"))?;
+            #[async_recursion]
+            async fn resolver<'a>(
+                value: DRQLValue,
+                data: &UserData<'a>,
+            ) -> anyhow::Result<HashSet<UserId>> {
+                let UserData { msg, ctx } = data;
 
-                        role.members(&discord_guild)
-                    }
-                }
-                Expr::UnknownID(id) => {
-                    if id == discord_guild.id.to_string() {
-                        walk_and_reduce_ast(msg, ctx, Expr::StringLiteral("everyone".to_string()))
-                            .await?
-                    } else {
-                        let possible_member = discord_guild.member(ctx, id.parse::<u64>()?).await;
-                        let possible_role =
-                            discord_guild.roles.get(&RoleId::from(id.parse::<u64>()?));
+                let discord_guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
 
-                        match (possible_member, possible_role) {
-                            (Ok(_), Some(_)) => bail!(
-                                "Somehow there was both a member and a role with the ID {}??",
-                                id
-                            ),
+                Ok(match value {
+                    DRQLValue::UserID(id) => HashSet::from([id]),
+                    DRQLValue::RoleID(id) => {
+                        if id.to_string() == discord_guild.id.to_string() {
+                            resolver(DRQLValue::StringLiteral("everyone".to_string()), data).await?
+                        } else {
+                            let role = discord_guild
+                                .roles
+                                .get(&id)
+                                .ok_or(anyhow!("Unable to resolve role"))?;
 
-                            (Ok(member), None) => {
-                                walk_and_reduce_ast(msg, ctx, Expr::UserID(member.user.id)).await?
-                            }
-
-                            (Err(_), Some(role))
-                                if !msg.member(ctx).await?.can_mention_role(ctx, role)? =>
-                            {
-                                bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name)
-                            }
-
-                            (Err(_), Some(role)) => {
-                                walk_and_reduce_ast(msg, ctx, Expr::RoleID(role.id)).await?
-                            }
-
-                            (Err(_), None) => bail!("Unable to resolve role or member ID: {}", id),
+                            role.members(&discord_guild)
                         }
                     }
-                }
-                Expr::StringLiteral(s) => {
-                    if s == "everyone" || s == "here" {
-                        if !msg.member(ctx).await?.permissions(ctx)?.mention_everyone() {
-                            bail!("You do not have the \"Mention everyone, here, and All Roles\" permission required to use the role {}.", s);
-                        }
+                    DRQLValue::UnknownID(id) => {
+                        if id == discord_guild.id.to_string() {
+                            resolver(DRQLValue::StringLiteral("everyone".to_string()), data).await?
+                        } else {
+                            let possible_member =
+                                discord_guild.member(ctx, id.parse::<u64>()?).await;
+                            let possible_role =
+                                discord_guild.roles.get(&RoleId::from(id.parse::<u64>()?));
 
-                        match s.as_str() {
-                            "everyone" => discord_guild.get_everyone(),
-                            "here" => discord_guild.get_here(),
-                            _ => panic!("This will never happen"),
-                        }
-                    } else {
-                        let possible_members = discord_guild
-                            .members // FIXME: what if the members aren't cached?
-                            .iter()
-                            .filter(|(_, member)| {
-                                member.user.tag().to_lowercase() == s.to_lowercase()
-                            })
-                            .collect::<Vec<_>>();
-                        let possible_roles = discord_guild
-                            .roles
-                            .iter()
-                            .filter(|(_, role)| role.name.to_lowercase() == s.to_lowercase())
-                            .collect::<Vec<_>>();
+                            match (possible_member, possible_role) {
+                                (Ok(_), Some(_)) => bail!(
+                                    "Somehow there was both a member and a role with the ID {}??",
+                                    id
+                                ),
 
-                        if possible_members.len() > 1 {
-                            bail!(
-                                "Multiple members matched your query for {}. Use their ID instead.",
-                                s
-                            );
-                        }
-                        if possible_members.len() > 1 {
-                            bail!(
-                                "Multiple roles matched your query for {}. Use their ID instead.",
-                                s
-                            );
-                        }
+                                (Ok(member), None) => {
+                                    resolver(DRQLValue::UserID(member.user.id), data).await?
+                                }
 
-                        match (possible_members.get(0), possible_roles.get(0)) {
-                            (Some(_), Some(_)) => bail!(
-                                "Found a member and role with the same name in your query for {}. Use their ID instead.", s
-                            ),
+                                (Err(_), Some(role))
+                                    if !msg.member(ctx).await?.can_mention_role(ctx, role)? =>
+                                {
+                                    bail!(
+                                        concat!(
+                                            "The role {} is not mentionable and you do not have",
+                                            " the \"Mention everyone, here, and All Roles\"",
+                                            " permission."
+                                        ),
+                                        role.name
+                                    )
+                                }
 
-                            (Some((_, member)), None) => {
-                                walk_and_reduce_ast(msg, ctx, Expr::UserID(member.user.id)).await?
-                            }
+                                (Err(_), Some(role)) => {
+                                    resolver(DRQLValue::RoleID(role.id), data).await?
+                                }
 
-                            (None, Some((_, role)))
-                                if !msg.member(ctx).await?.can_mention_role(ctx, role)? =>
-                            {
-                                bail!("The role {} is not mentionable and you do not have the \"Mention everyone, here, and All Roles\" permission.", role.name);
-                            }
-
-                            (None, Some((_, role))) => {
-                                walk_and_reduce_ast(msg, ctx, Expr::RoleID(role.id)).await?
-                            }
-
-                            (None, None) => {
-                                bail!("Unable to resolve role or member **username** (use a tag like \"User#1234\" and no nickname!): {}", s);
+                                (Err(_), None) => {
+                                    bail!("Unable to resolve role or member ID: {}", id)
+                                }
                             }
                         }
                     }
-                }
-            })
+                    DRQLValue::StringLiteral(s) => {
+                        if s == "everyone" || s == "here" {
+                            if !msg.member(ctx).await?.permissions(ctx)?.mention_everyone() {
+                                bail!(
+                                    concat!(
+                                        "You do not have the \"Mention everyone, here, and ",
+                                        "All Roles\" permission required to use the role {}."
+                                    ),
+                                    s
+                                );
+                            }
+
+                            match s.as_str() {
+                                "everyone" => discord_guild.get_everyone(),
+                                "here" => discord_guild.get_here(),
+                                _ => panic!("This will never happen"),
+                            }
+                        } else {
+                            let possible_members = discord_guild
+                                .members // FIXME: what if the members aren't cached?
+                                .iter()
+                                .filter(|(_, member)| {
+                                    member.user.tag().to_lowercase() == s.to_lowercase()
+                                })
+                                .collect::<Vec<_>>();
+                            let possible_roles = discord_guild
+                                .roles
+                                .iter()
+                                .filter(|(_, role)| role.name.to_lowercase() == s.to_lowercase())
+                                .collect::<Vec<_>>();
+
+                            if possible_members.len() > 1 {
+                                bail!(
+                                    concat!(
+                                        "Multiple members matched your query for {}.",
+                                        " Use their ID instead."
+                                    ),
+                                    s
+                                );
+                            }
+                            if possible_members.len() > 1 {
+                                bail!(
+                                    concat!(
+                                        "Multiple roles matched your query for {}.",
+                                        " Use their ID instead."
+                                    ),
+                                    s
+                                );
+                            }
+
+                            match (possible_members.get(0), possible_roles.get(0)) {
+                                (Some(_), Some(_)) => bail!(
+                                    concat!(
+                                        "Found a member and role with the same name",
+                                        " in your query for {}. Use their ID instead."
+                                    ),
+                                    s
+                                ),
+
+                                (Some((_, member)), None) => {
+                                    resolver(DRQLValue::UserID(member.user.id), data).await?
+                                }
+
+                                (None, Some((_, role)))
+                                    if !msg.member(ctx).await?.can_mention_role(ctx, role)? =>
+                                {
+                                    bail!(
+                                        concat!(
+                                            "The role {} is not mentionable and you do not have",
+                                            " the \"Mention everyone, here, and All",
+                                            " Roles\" permission."
+                                        ),
+                                        role.name
+                                    );
+                                }
+
+                                (None, Some((_, role))) => {
+                                    resolver(DRQLValue::RoleID(role.id), data).await?
+                                }
+
+                                (None, None) => {
+                                    bail!(
+                                        concat!(
+                                            "Unable to resolve role or member **username**",
+                                            " (use a tag like \"User#1234\" and no nickname!): {}"
+                                        ),
+                                        s
+                                    );
+                                }
+                            }
+                        }
+                    }
+                })
+            }
+
+            run_reducers(node.into(), &resolver, &UserData { msg, ctx }).await
         }
 
         let members_to_ping = match walk_and_reduce_ast(msg, ctx, ast).await {
