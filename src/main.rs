@@ -85,7 +85,7 @@ fn chunk_str_vec_into_max_size(
         if next.len() > size {
             bail!("Chunk of length {} too large for size {}", next.len(), size);
         }
-        if current.len() + next.len() + sep.len() > size as usize {
+        if current.len() + next.len() + sep.len() > size {
             result.push(current);
             current = next;
         } else {
