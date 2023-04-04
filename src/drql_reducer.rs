@@ -36,6 +36,7 @@ pub enum ReducerOp<User> {
 /// ```
 ///
 /// The "user data" is passed into `f` for all calls.
+#[must_use]
 #[async_recursion]
 pub async fn run_reducers<'user_data, User, Output, F, FnFut, UserData, E>(
     node: ReducerOp<User>,
