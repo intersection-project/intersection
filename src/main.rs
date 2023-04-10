@@ -521,6 +521,8 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                 // Filter out any values in qualifiers with a superset also within qualifiers.
                 !(qualifiers.iter().any(|(other_key, other_value)| {
                     // But don't count ourself
+                    // FIXME: If we have two roles with IDENTICAL member lists,
+                    //        will they both be removed at this step?
                     key != other_key && other_value.is_superset(value)
                 }))
             })
