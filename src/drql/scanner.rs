@@ -8,7 +8,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 
 /// Returns an Iterator over provided text, returning every value within `@{ ... }`.
-pub fn scan(input: &str) -> impl Iterator<Item = &str> {
+pub fn scan(input: &str) -> impl Iterator<Item = &'_ str> {
     lazy_static! {
         static ref RE: Regex = Regex::new(r"@\{(.+?)\}").unwrap();
     }

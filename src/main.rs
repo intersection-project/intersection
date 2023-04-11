@@ -1,4 +1,3 @@
-#![feature(is_some_and)]
 #![feature(never_type)]
 
 mod drql;
@@ -514,6 +513,8 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
         // Now we remove redundant qualifiers. This is done by iterating over each one and determining
         // if one of the other values in it is a superset of itself, if so, it's redundant and can be
         // removed.
+        // TODO: Really, we can remove an entry if it is a subset of the union of all other entries,
+        //       but is this slow?
         let new_qualifiers: HashMap<&RoleType, &HashSet<UserId>> = qualifiers
             .iter()
             .map(|(&a, &b)| (a, b)) // TODO: Is there a way to do this without copying?
