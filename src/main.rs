@@ -391,7 +391,7 @@ async fn handle_command(data: CommandExecution<'_>) -> anyhow::Result<()> {
                         match s.as_str() {
                             "everyone" => discord_guild.get_everyone(),
                             "here" => discord_guild.get_here(),
-                            _ => panic!("This will never happen"),
+                            _ => unreachable!(),
                         }
                     } else {
                         let possible_members = discord_guild
