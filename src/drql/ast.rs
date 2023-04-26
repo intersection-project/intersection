@@ -1,4 +1,4 @@
-use serenity::model::prelude::{RoleId, UserId};
+use poise::serenity_prelude::model::prelude::{RoleId, UserId};
 
 #[derive(Debug, PartialEq)]
 pub enum Expr {

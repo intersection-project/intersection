@@ -48,7 +48,7 @@ pub fn parse_drql(input: &str) -> Result<ast::Expr, DrqlParserError<ast::Expr>> 
 mod tests {
     use super::*;
     use crate::drql::ast::Expr;
-    use serenity::model::prelude::{RoleId, UserId};
+    use poise::serenity_prelude::model::prelude::{RoleId, UserId};
 
     #[test]
     fn many_token_types() {
