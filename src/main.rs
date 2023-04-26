@@ -22,6 +22,7 @@ use diesel::{
     result::Error::NotFound,
     ExpressionMethods, QueryDsl, RunQueryDsl, SqliteConnection,
 };
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness, HarnessWithOutput};
 use dotenvy::dotenv;
 use drql::ast;
 use models::GuildDBData;
@@ -684,7 +685,7 @@ async fn handle_message(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
     };
 
     println!(
-        "Command {} run by {} ({}) with args \"{}\"",
+        "Command \"{}\" run by {} ({}) with args \"{}\"",
         command,
         msg.author.tag(),
         msg.author.id,
@@ -726,19 +727,28 @@ impl EventHandler for Handler {
     }
 }
 
+pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    dotenv()?;
+    // We ignore the error because environment variables may be passed
+    // in directly, and .env might not exist (e.g. in Docker with --env-file)
+    let _ = dotenv();
 
-    let database_url = env::var("DATABASE_URL").expect("Expected DATABASE_URL in the environment");
+    let database_url = env::var("DATABASE_URL")
+        .expect("Expected DATABASE_URL in the environment -- populate .env?");
     let pool = Pool::builder()
         .test_on_check_out(true)
         .build(ConnectionManager::<SqliteConnection>::new(database_url))?;
 
+    HarnessWithOutput::new(&mut pool.get()?, std::io::stdout())
+        .run_pending_migrations(MIGRATIONS)
+        .or(Err(anyhow!("Failed to run database migrations")))?;
+
     let intents = GatewayIntents::all();
 
     let mut client = Client::builder(
-        env::var("TOKEN").expect("Expected a token in the environment"),
+        env::var("TOKEN").expect("Expected a token in the environment -- populate .env?"),
         intents,
     )
     .event_handler(Handler)
