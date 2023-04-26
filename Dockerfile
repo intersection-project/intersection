@@ -3,7 +3,7 @@ WORKDIR /app
 RUN cargo install cargo-chef
 
 FROM debian:buster-slim AS runtime
-RUN apt-get update && apt-get install -y libsqlite3-dev
+RUN apt-get update && apt-get upgrade
 
 FROM chef AS planner
 COPY . .
@@ -18,6 +18,5 @@ RUN cargo build --release
 
 FROM runtime
 WORKDIR /app
-COPY ./migrations ./migrations
 COPY --from=builder /app/target/release/intersection /usr/local/bin
 ENTRYPOINT ["/usr/local/bin/intersection"]

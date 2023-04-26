@@ -141,10 +141,43 @@ impl CustomRoleImpl for serenity::Role {
     }
 }
 
+// THE FIRST LINE IS THE COMMAND DESCRIPTION!
+/// Check if Intersection is online
 #[poise::command(slash_command)]
 async fn ping(ctx: Context<'_>) -> Result<(), anyhow::Error> {
     // TODO: get current bot ping
     ctx.say("I'm alive!").await?;
+    Ok(())
+}
+
+/// Learn about the Intersection Project
+#[poise::command(slash_command)]
+async fn about(ctx: Context<'_>) -> Result<(), anyhow::Error> {
+    ctx.say(concat!(
+        "The Intersection Project is a Discord bot with the purpose of supercharging Discord",
+        " mentions. Intersection empowers Discord with a language called DRQL -- the Discord",
+        " Role Query Language. DRQL is a very simple set-theory based query language that",
+        " allows you to make advanced operations on roles.\n",
+        "\n",
+        "An example of a DRQL query might be `@{ admins + (mods & here) }`. This query represents",
+        " some very basic set theory concepts, namely the union and **intersection** operations.",
+        " The following operators are available in DRQL:\n",
+        "- `A + B` or `A | B`: Union -- Members with either role A or role B (equivalent to if you",
+        " were to ping @A and @B)\n",
+        "- `A & B`: Intersection -- Members with *both* roles A and B (something Discord does not",
+        " provide a native facility for\n",
+        "- `A - B`: Difference -- Members with role A but *not* role B\n",
+        "\n",
+        "Intersection functions by searching for messages that contain DRQL queries wrapped in @{...}",
+        " and then calculating and replying to your message by pinging every user that that query matched.",
+        " The bot will also attempt to ping *roles* that match the query (to help keep the resulting",
+        " message short) but this is not always possible. The availability of so-called \"optimized",
+        " result messages\" depends on the query and the roles in your server.\n",
+        "\n",
+        "Intersection is still a project in-development. If you have any questions, comments, or",
+        " suggestions, please feel free to reach out!"
+    ))
+    .await?;
     Ok(())
 }
 
@@ -155,6 +188,17 @@ async fn on_message(
     _data: &Data,
 ) -> Result<(), anyhow::Error> {
     if msg.author.bot {
+        return Ok(());
+    }
+
+    if msg.guild(ctx).is_none() {
+        if drql::scanner::scan(msg.content.as_str()).count() > 0 {
+            msg.reply(
+                ctx,
+                "DRQL queries are only supported in guilds, not in DMs.",
+            )
+            .await?;
+        }
         return Ok(());
     }
 
@@ -467,12 +511,35 @@ async fn on_message(
         return Ok(());
     }
 
-    const NOTIFICATION_STRING: &str = "Notification triggered by Intersection.\n";
+    /// Find the application command `/{name}` and return `</{name}:{id of /name}>`, or `/name` if
+    /// it could not be found.
+    async fn mention_application_command(ctx: &serenity::Context, name: &str) -> String {
+        serenity::model::application::command::Command::get_global_application_commands(ctx)
+            .await
+            .ok()
+            .and_then(|x| x
+                .iter()
+                .find(|y| y.name == name)
+                .and_then(|z| Some(format!("</{}:{}>", name, z.id.0)))
+                .or(None))
+            .unwrap_or_else(|| {
+                println!("WARN (mention_application_command): Attempt to mention a slash command {} that was not found!", name);
+                format!("/{}", name)
+            })
+    }
 
-    if stringified_mentions.join(" ").len() <= (2000 - NOTIFICATION_STRING.len()) {
+    let notification_string = format!(
+        concat!(
+            "Notification triggered by Intersection.\n",
+            ":question: **What is this?** Run {} for more information.\n"
+        ),
+        mention_application_command(ctx, "about").await
+    );
+
+    if stringified_mentions.join(" ").len() <= (2000 - notification_string.len()) {
         msg.reply(
             ctx,
-            format!("{}{}", NOTIFICATION_STRING, stringified_mentions.join(" ")),
+            format!("{}{}", notification_string, stringified_mentions.join(" ")),
         )
         .await?;
     } else {
@@ -488,8 +555,17 @@ async fn on_message(
         for message in messages {
             msg.reply(ctx, message).await?;
         }
-        msg.reply(ctx, "Notification triggered successfully.")
-            .await?;
+        msg.reply(
+            ctx,
+            format!(
+                concat!(
+                    "Notification triggered successfully.\n",
+                    ":question: **What is this?** Run {} for more information."
+                ),
+                mention_application_command(ctx, "about").await
+            ),
+        )
+        .await?;
     }
 
     Ok(())
@@ -503,7 +579,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let framework: poise::FrameworkBuilder<Data, anyhow::Error> = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![ping()],
+            commands: vec![ping(), about()],
             event_handler: |ctx, event, framework, data| {
                 Box::pin(async move {
                     if let poise::Event::Message { new_message } = event {
