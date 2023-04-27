@@ -12,7 +12,7 @@ dotenvy = "0.15.7"
 json = "0.12.4"
 lalrpop-util = "0.19.10"
 lazy_static = "1.4.0"
-logos = { git = "https://github.com/maciejhirsz/logos", version = "0.12.1" }
+logos = "0.13.0"
 poise = "0.5.4"
 regex = "1.8.1"
 tokio = { version = "1.28.0", features = ["macros", "rt-multi-thread"] }
