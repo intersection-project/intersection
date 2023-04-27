@@ -385,6 +385,7 @@ async fn mention_application_command(ctx: &serenity::Context, name: &str) -> Str
 }
 
 /// Results from [unionize_set].
+#[derive(Debug)]
 struct UnionizeSetResult<'a, Key, Value> {
     sets: HashMap<&'a Key, &'a HashSet<Value>>,
     outliers: HashSet<Value>,
@@ -718,5 +719,51 @@ mod tests {
             chunk_str_vec_into_max_size(vec!["ABCDEF".to_string()], " ", 5),
             Err(_)
         ));
+    }
+
+    #[test]
+    fn unionize_set_works_with_superset_of_all() {
+        let target = HashSet::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        let preexisting_sets = HashMap::from([
+            ("empty set", HashSet::from([])),
+            ("not a subset", HashSet::from([1, 32, 5, 2, 6])),
+            (
+                "exact match",
+                HashSet::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+            ),
+        ]);
+
+        let UnionizeSetResult { sets, outliers } = unionize_set(&target, &preexisting_sets);
+        assert_eq!(outliers.len(), 0);
+        assert_eq!(
+            sets,
+            HashMap::from([(
+                &"exact match",
+                &HashSet::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+            )])
+        );
+    }
+
+    #[test]
+    fn unionize_set_works() {
+        let target = HashSet::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        let preexisting_sets = HashMap::from([
+            ("empty set", HashSet::from([])), // gets optimized away
+            ("not a subset", HashSet::from([1, 32, 5, 2, 6])), // gets disqualified
+            ("subset of A", HashSet::from([1, 2, 3, 4])), // gets optimized away
+            ("A", HashSet::from([1, 2, 3, 4, 5, 8])), // kept
+            ("other subset of A", HashSet::from([4, 1, 8])), // gets optimized away
+            ("B", HashSet::from([5, 9])),     // kept
+        ]);
+
+        let UnionizeSetResult { sets, outliers } = unionize_set(&target, &preexisting_sets);
+        assert_eq!(outliers, HashSet::from([6, 7, 10]));
+        assert_eq!(
+            sets,
+            HashMap::from([
+                (&"A", &HashSet::from([1, 2, 3, 4, 5, 8])),
+                (&"B", &HashSet::from([5, 9]))
+            ])
+        );
     }
 }
