@@ -1,5 +1,3 @@
-#![feature(never_type)]
-
 mod drql;
 
 #[macro_use]
@@ -117,9 +115,11 @@ impl CustomGuildImpl for serenity::Guild {
         self.get_everyone()
             .into_iter()
             .filter(|id| {
-                self.presences
-                    .get(id)
-                    .is_some_and(|presence| presence.status != serenity::OnlineStatus::Offline)
+                if let Some(presence) = self.presences.get(id) {
+                    presence.status != serenity::OnlineStatus::Offline
+                } else {
+                    false
+                }
             })
             .collect::<HashSet<_>>()
     }

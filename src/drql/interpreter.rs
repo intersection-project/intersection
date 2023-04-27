@@ -87,7 +87,7 @@ mod tests {
 
         struct UserData;
 
-        async fn f(input: HashSet<u32>, _: &UserData) -> Result<HashSet<u32>, !> {
+        async fn f(input: HashSet<u32>, _: &UserData) -> Result<HashSet<u32>, ()> {
             Ok(input)
         }
 
