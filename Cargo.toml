@@ -10,7 +10,7 @@ anyhow = "1.0.70"
 async-recursion = "1.0.4"
 dotenvy = "0.15.7"
 json = "0.12.4"
-lalrpop-util = "0.19.8"
+lalrpop-util = "0.19.10"
 lazy_static = "1.4.0"
 logos = { git = "https://github.com/maciejhirsz/logos", version = "0.12.1" }
 poise = "0.5.4"
