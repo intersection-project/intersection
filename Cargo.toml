@@ -15,7 +15,7 @@ lazy_static = "1.4.0"
 logos = { git = "https://github.com/maciejhirsz/logos", version = "0.12.1" }
 poise = "0.5.4"
 regex = "1.7.1"
-tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.28.0", features = ["macros", "rt-multi-thread"] }
 
 [build-dependencies]
 lalrpop = { version = "0.19.8", default-features = false }
