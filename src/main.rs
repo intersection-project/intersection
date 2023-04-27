@@ -541,7 +541,7 @@ async fn on_message(
     let UnionizeSetResult { sets, outliers } =
         unionize_set(&members_to_ping, &roles_and_their_members);
 
-    // if members_to_ping.len() > 25 {
+    // if members_to_ping.len() > 50 {
     //     // TODO: Ask the user to confirm they wish to do this action
     // }
 
