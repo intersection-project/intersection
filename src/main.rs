@@ -1,4 +1,5 @@
 #![feature(never_type)]
+#![feature(async_closure)]
 
 mod drql;
 
@@ -21,7 +22,9 @@ use std::{
     collections::{HashMap, HashSet},
     env,
     fmt::Display,
+    future::Future,
     hash::Hash,
+    pin::Pin,
 };
 
 struct Data {}
@@ -362,6 +365,23 @@ async fn resolver<'a>(
     })
 }
 
+/// Find the application command `/{name}` and return `</{name}:{id of /name}>`, or `/name` if
+/// it could not be found.
+async fn mention_application_command(ctx: &serenity::Context, name: &str) -> String {
+    serenity::model::application::command::Command::get_global_application_commands(ctx)
+        .await
+        .ok()
+        .and_then(|x| x
+            .iter()
+            .find(|y| y.name == name)
+            .and_then(|z| Some(format!("</{}:{}>", name, z.id.0)))
+            .or(None))
+        .unwrap_or_else(|| {
+            println!("WARN (mention_application_command): Attempt to mention a slash command {} that was not found!", name);
+            format!("/{}", name)
+        })
+}
+
 async fn on_message(
     ctx: &serenity::Context,
     msg: &serenity::Message,
@@ -504,23 +524,6 @@ async fn on_message(
     if stringified_mentions.is_empty() {
         msg.reply(ctx, "No users matched.").await?;
         return Ok(());
-    }
-
-    /// Find the application command `/{name}` and return `</{name}:{id of /name}>`, or `/name` if
-    /// it could not be found.
-    async fn mention_application_command(ctx: &serenity::Context, name: &str) -> String {
-        serenity::model::application::command::Command::get_global_application_commands(ctx)
-            .await
-            .ok()
-            .and_then(|x| x
-                .iter()
-                .find(|y| y.name == name)
-                .and_then(|z| Some(format!("</{}:{}>", name, z.id.0)))
-                .or(None))
-            .unwrap_or_else(|| {
-                println!("WARN (mention_application_command): Attempt to mention a slash command {} that was not found!", name);
-                format!("/{}", name)
-            })
     }
 
     let notification_string = format!(
