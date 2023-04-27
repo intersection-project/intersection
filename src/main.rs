@@ -22,9 +22,7 @@ use std::{
     collections::{HashMap, HashSet},
     env,
     fmt::Display,
-    future::Future,
     hash::Hash,
-    pin::Pin,
 };
 
 struct Data {}
@@ -368,18 +366,22 @@ async fn resolver<'a>(
 /// Find the application command `/{name}` and return `</{name}:{id of /name}>`, or `/name` if
 /// it could not be found.
 async fn mention_application_command(ctx: &serenity::Context, name: &str) -> String {
-    serenity::model::application::command::Command::get_global_application_commands(ctx)
-        .await
-        .ok()
-        .and_then(|x| x
-            .iter()
-            .find(|y| y.name == name)
-            .and_then(|z| Some(format!("</{}:{}>", name, z.id.0)))
-            .or(None))
-        .unwrap_or_else(|| {
-            println!("WARN (mention_application_command): Attempt to mention a slash command {} that was not found!", name);
+    match serenity::model::application::command::Command::get_global_application_commands(ctx).await
+    {
+        Ok(commands) => match commands.iter().find(|command| command.name == name) {
+            Some(command) => format!("</{}:{}>", name, command.id.0),
+            None => {
+                println!("WARN (mention_application_command): Attempt to mention a slash command {} that was not found!", name);
+                format!("/{}", name)
+            }
+        },
+        Err(_) => {
+            println!(
+                "WARN (mention_application_command): Error looking up global application commands!"
+            );
             format!("/{}", name)
-        })
+        }
+    }
 }
 
 /// Results from [unionize_set].
@@ -566,8 +568,8 @@ async fn on_message(
     // double ping!
     let stringified_mentions = sets
         .into_keys()
-        .map(|x| MentionType::Role(x.clone()))
-        .chain(outliers.into_iter().map(|x| MentionType::User(x)))
+        .map(|x| MentionType::Role(*x))
+        .chain(outliers.into_iter().map(MentionType::User))
         .map(|x| x.to_string())
         .collect::<Vec<_>>();
 
