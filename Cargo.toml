@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.69"
 async-recursion = "1.0.4"
-dotenvy = "0.15.6"
+dotenvy = "0.15.7"
 json = "0.12.4"
 lalrpop-util = "0.19.8"
 lazy_static = "1.4.0"
