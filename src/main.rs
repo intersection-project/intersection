@@ -1,5 +1,4 @@
 #![feature(never_type)]
-#![feature(async_closure)]
 
 mod drql;
 
