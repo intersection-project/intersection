@@ -1,7 +1,6 @@
 #![feature(never_type)]
 
 mod drql;
-mod drql_reducer;
 
 #[macro_use]
 extern crate lalrpop_util;
@@ -12,7 +11,7 @@ lalrpop_mod!(
     parser
 );
 
-use crate::{drql::ast::Expr, drql_reducer::ReducerOp};
+use crate::drql::{ast::Expr, interpreter::ReducerOp};
 use anyhow::{anyhow, bail};
 use async_recursion::async_recursion;
 use dotenvy::dotenv;
@@ -398,7 +397,7 @@ async fn on_message(
     }
 
     let members_to_ping =
-        match drql_reducer::run_reducers(ast.into(), &resolver, &UserData { msg, ctx }).await {
+        match drql::interpreter::interpret(ast.into(), &resolver, &UserData { msg, ctx }).await {
             Ok(ast) => ast,
             Err(e) => {
                 msg.reply(

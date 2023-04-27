@@ -13,7 +13,7 @@ pub enum ReducerOp<User> {
 /// calculating them as a set. This is best explained with an example:
 ///
 /// ```
-/// use drql_reducer::{ReducerOp, run_reducers};
+/// use drql::interpreter::{ReducerOp, interpret};
 ///
 /// let tree = ReducerOp::Union(
 ///     Box::new(ReducerOp::User(HashSet::from([1]))),
@@ -30,7 +30,7 @@ pub enum ReducerOp<User> {
 /// }
 ///
 /// assert_eq!(
-///     run_reducers(tree, &f, &UserData).await,
+///     interpret(tree, &f, &UserData).await,
 ///     Ok(HashSet::from([1, 2, 4])
 /// );
 /// ```
@@ -38,7 +38,7 @@ pub enum ReducerOp<User> {
 /// The "user data" is passed into `f` for all calls.
 #[must_use]
 #[async_recursion]
-pub async fn run_reducers<'user_data, User, Output, F, FnFut, UserData, E>(
+pub async fn interpret<'user_data, User, Output, F, FnFut, UserData, E>(
     node: ReducerOp<User>,
     f: &F,
     data: &'user_data UserData,
@@ -52,19 +52,19 @@ where
     E: Send + Sync,
 {
     Ok(match node {
-        ReducerOp::Difference(l, r) => run_reducers(*l, f, data)
+        ReducerOp::Difference(l, r) => interpret(*l, f, data)
             .await?
-            .difference(&run_reducers(*r, f, data).await?)
+            .difference(&interpret(*r, f, data).await?)
             .copied()
             .collect::<HashSet<_>>(),
-        ReducerOp::Intersection(l, r) => run_reducers(*l, f, data)
+        ReducerOp::Intersection(l, r) => interpret(*l, f, data)
             .await?
-            .intersection(&run_reducers(*r, f, data).await?)
+            .intersection(&interpret(*r, f, data).await?)
             .copied()
             .collect::<HashSet<_>>(),
-        ReducerOp::Union(l, r) => run_reducers(*l, f, data)
+        ReducerOp::Union(l, r) => interpret(*l, f, data)
             .await?
-            .union(&run_reducers(*r, f, data).await?)
+            .union(&interpret(*r, f, data).await?)
             .copied()
             .collect::<HashSet<_>>(),
         ReducerOp::User(u) => f(u, data).await?,
@@ -92,7 +92,7 @@ mod tests {
         }
 
         assert_eq!(
-            run_reducers(tree, &f, &UserData).await,
+            interpret(tree, &f, &UserData).await,
             Ok(HashSet::from([1, 2, 4]))
         );
     }
