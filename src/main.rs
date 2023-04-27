@@ -30,7 +30,7 @@ use std::{
 struct Data {}
 type Context<'a> = poise::Context<'a, Data, anyhow::Error>;
 
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 enum RoleType {
     Everyone,
     Here,
@@ -382,6 +382,91 @@ async fn mention_application_command(ctx: &serenity::Context, name: &str) -> Str
         })
 }
 
+/// Results from [unionize_set].
+struct UnionizeSetResult<'a, Key, Value> {
+    sets: HashMap<&'a Key, &'a HashSet<Value>>,
+    outliers: HashSet<Value>,
+}
+
+/// "Optimize" a set, representing it as the union of pre-existing sets and one "outliers" set.
+///
+/// Given the following:
+/// - A target set to represent
+/// - A HashMap of pre-existing HashSets
+///
+/// This function will return two HashSets:
+/// - A set of keys within the HashMap
+/// - The "outliers" set
+///
+/// The purpose of this function is to take the input set and calculate which pre-existing sets
+/// which when the union of all of them along with the outliers set is calculated, will exactly
+/// equal the target set. This is better described using an example from this project: Intersection
+/// calculates a set of user IDs that must be mentioned, but the long message that might be a result
+/// of a long DRQL query would not be very user-friendly. This function is passed the target users,
+/// and a HashMap of every role in the server, and it outputs the roles that can be mentioned to
+/// closely represent the target users in as few mentions as possible. In some cases, there will not
+/// be a perfect representation, and the outliers set represents those that were not included.
+///
+/// This function is a best-effort optimization, and speed is a CRITICAL priority, meaning some
+/// small details may not be accounted for in the interest of rare cases. The output from this
+/// function may change without notice.
+///
+/// TODO: Example
+fn unionize_set<'a, Key, Value>(
+    target: &'a HashSet<Value>,
+    preexisting_sets: &'a HashMap<Key, HashSet<Value>>,
+) -> UnionizeSetResult<'a, Key, Value>
+where
+    Key: PartialEq + Eq + Hash + Copy,
+    Value: PartialEq + Eq + Hash + Copy,
+{
+    // First, we will determine which sets in preexisting_sets even *qualify* to be used in the output.
+    // The condition here is simple: A qualifying set must be a subset of the target.
+    let qualifying_sets = preexisting_sets
+        .iter()
+        .filter(|(_, set)| set.is_subset(target))
+        .collect::<HashMap<_, _>>();
+
+    // Next, we remove so-called "redundant qualifiers." A qualifier is considered redundant if
+    // another qualifying set is a superset of it -- because if we take the union, all of the values
+    // in this set will be included in one of the other sets, making this set unnecessary.
+    let optimized_qualifiers = qualifying_sets
+        .iter()
+        .filter(|(key, value)| {
+            // Filter out any values where this predicate is true for any value within qualifying_sets...
+            !(qualifying_sets.iter().any(|(other_key, other_value)| {
+                // ...except for the value itself.
+                // FIXME: In the case that two qualifiers have identical member lists,
+                //        (e.g.: @{everyone} where @everyone are all online so @everyone==@here),
+                //        this will remove *both* sets. this is not catastrophic, as optimization
+                //        is sorta "best-effort" and the outliers will be caught, but it's nice
+                //        if we can fix this
+                *key != other_key && value.is_subset(other_value)
+            }))
+        })
+        .map(|(&a, &b)| (a, b))
+        .collect::<HashMap<_, _>>();
+
+    // Next, we calculate the union of all of the sets we qualified! This is used in calculating
+    // outliers, later.
+    let union_of_qualifiers = optimized_qualifiers
+        .values()
+        .copied() // TODO: remove copy
+        .flatten()
+        .copied() // TODO: remove copy
+        .collect::<HashSet<_>>();
+
+    let outliers = target
+        .difference(&union_of_qualifiers)
+        .copied() // TODO: remove copy
+        .collect::<HashSet<_>>();
+
+    UnionizeSetResult {
+        sets: optimized_qualifiers,
+        outliers,
+    }
+}
+
 async fn on_message(
     ctx: &serenity::Context,
     msg: &serenity::Message,
@@ -449,44 +534,9 @@ async fn on_message(
         }
     }
 
-    // determine which of the available roles in the guild is a subset of our target notification
-    // and qualify it
-    let qualifiers: HashMap<&RoleType, &HashSet<serenity::UserId>> = roles_and_their_members
-        .iter()
-        .filter(|(_, members)| members.is_subset(&members_to_ping))
-        .collect::<HashMap<_, _>>();
-
-    // Now we remove redundant qualifiers. This is done by iterating over each one and determining
-    // if one of the other values in it is a superset of itself, if so, it's redundant and can be
-    // removed.
-    let new_qualifiers: HashMap<&RoleType, &HashSet<serenity::UserId>> = qualifiers
-        .iter()
-        .map(|(&a, &b)| (a, b)) // TODO: Is there a way to do this without copying?
-        .filter(|(key, value)| {
-            // Filter out any values in qualifiers with a superset also within qualifiers.
-            !(qualifiers.iter().any(|(other_key, other_value)| {
-                // But don't count ourself
-                // FIXME: In the case that two qualifiers have identical member lists,
-                //        (e.g.: @{everyone} where @everyone are all online so @everyone==@here),
-                //        this will remove *both* sets. this is not catastrophic, as optimization
-                //        is sorta "best-effort" and the outliers will be caught, but it's nice
-                //        if we can fix this
-                key != other_key && other_value.is_superset(value)
-            }))
-        })
-        .collect::<HashMap<_, _>>();
-
-    // Now that new_qualifiers holds the roles that we plan on pinging, we determine our outliers.
-    let included_members: HashSet<serenity::UserId> = new_qualifiers
-        .values()
-        .copied()
-        .flatten()
-        .copied() // TODO: is there a way to not copy here? the problem is .difference won't work with iterator over T vs &T,
-        .collect::<HashSet<_>>();
-
-    let outliers = members_to_ping
-        .difference(&included_members)
-        .collect::<HashSet<_>>();
+    // next, we represent the list of users as a bunch of roles containing them and one outliers set.
+    let UnionizeSetResult { sets, outliers } =
+        unionize_set(&members_to_ping, &roles_and_their_members);
 
     // if members_to_ping.len() > 25 {
     //     // TODO: Ask the user to confirm they wish to do this action
@@ -514,10 +564,10 @@ async fn on_message(
     // message 1: @A @B ...
     // message 2: @C @D ...
     // double ping!
-    let stringified_mentions = new_qualifiers
+    let stringified_mentions = sets
         .into_keys()
         .map(|x| MentionType::Role(x.clone()))
-        .chain(outliers.into_iter().map(|x| MentionType::User(*x)))
+        .chain(outliers.into_iter().map(|x| MentionType::User(x)))
         .map(|x| x.to_string())
         .collect::<Vec<_>>();
 
