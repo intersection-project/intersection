@@ -162,7 +162,8 @@ impl From<Expr> for ReducerOp<DRQLValue> {
 /// need to be mentioned
 #[derive(Clone)]
 struct UserData<'a> {
-    msg: &'a serenity::Message,
+    guild: &'a serenity::Guild,
+    member: &'a serenity::Member,
     ctx: &'a serenity::Context,
 }
 
@@ -171,32 +172,28 @@ async fn resolver<'a>(
     value: DRQLValue,
     data: &UserData<'a>,
 ) -> anyhow::Result<HashSet<serenity::UserId>> {
-    let UserData { msg, ctx } = data;
-
-    let discord_guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
+    let UserData { guild, member, ctx } = data;
 
     Ok(match value {
         DRQLValue::UserID(id) => HashSet::from([id]),
         DRQLValue::RoleID(id) => {
-            if id.to_string() == discord_guild.id.to_string() {
+            if id.to_string() == guild.id.to_string() {
                 resolver(DRQLValue::StringLiteral("everyone".to_string()), data).await?
             } else {
-                let role = discord_guild
+                let role = guild
                     .roles
                     .get(&id)
                     .ok_or(anyhow!("Unable to resolve role"))?;
 
-                role.members(&discord_guild)
+                role.members(&guild)
             }
         }
         DRQLValue::UnknownID(id) => {
-            if id == discord_guild.id.to_string() {
+            if id == guild.id.to_string() {
                 resolver(DRQLValue::StringLiteral("everyone".to_string()), data).await?
             } else {
-                let possible_member = discord_guild.member(ctx, id.parse::<u64>()?).await;
-                let possible_role = discord_guild
-                    .roles
-                    .get(&serenity::RoleId::from(id.parse::<u64>()?));
+                let possible_member = guild.member(ctx, id.parse::<u64>()?).await;
+                let possible_role = guild.roles.get(&serenity::RoleId::from(id.parse::<u64>()?));
 
                 match (possible_member, possible_role) {
                     (Ok(_), Some(_)) => bail!(
@@ -206,9 +203,7 @@ async fn resolver<'a>(
 
                     (Ok(member), None) => resolver(DRQLValue::UserID(member.user.id), data).await?,
 
-                    (Err(_), Some(role))
-                        if !msg.member(ctx).await?.can_mention_role(ctx, role)? =>
-                    {
+                    (Err(_), Some(role)) if !member.can_mention_role(ctx, role)? => {
                         bail!(
                             concat!(
                                 "The role {} is not mentionable and you do not have",
@@ -229,7 +224,7 @@ async fn resolver<'a>(
         }
         DRQLValue::StringLiteral(s) => {
             if s == "everyone" || s == "here" {
-                if !msg.member(ctx).await?.permissions(ctx)?.mention_everyone() {
+                if !member.permissions(ctx)?.mention_everyone() {
                     bail!(
                         concat!(
                             "You do not have the \"Mention everyone, here, and ",
@@ -240,17 +235,17 @@ async fn resolver<'a>(
                 }
 
                 match s.as_str() {
-                    "everyone" => discord_guild.get_everyone(),
-                    "here" => discord_guild.get_here(),
+                    "everyone" => guild.get_everyone(),
+                    "here" => guild.get_here(),
                     _ => unreachable!(),
                 }
             } else {
-                let possible_members = discord_guild
+                let possible_members = guild
                     .members // FIXME: what if the members aren't cached?
                     .iter()
                     .filter(|(_, member)| member.user.tag().to_lowercase() == s.to_lowercase())
                     .collect::<Vec<_>>();
-                let possible_roles = discord_guild
+                let possible_roles = guild
                     .roles
                     .iter()
                     .filter(|(_, role)| role.name.to_lowercase() == s.to_lowercase())
@@ -285,9 +280,7 @@ async fn resolver<'a>(
                         resolver(DRQLValue::UserID(member.user.id), data).await?
                     }
 
-                    (None, Some((_, role)))
-                        if !msg.member(ctx).await?.can_mention_role(ctx, role)? =>
-                    {
+                    (None, Some((_, role))) if !member.can_mention_role(ctx, role)? => {
                         bail!(
                             concat!(
                                 "The role {} is not mentionable and you do not have",
@@ -366,27 +359,36 @@ async fn on_message(
         return Ok(());
     };
 
-    let members_to_ping =
-        match drql::interpreter::interpret(ast.into(), &resolver, &UserData { msg, ctx }).await {
-            Ok(ast) => ast,
-            Err(e) => {
-                msg.reply(
-                    ctx,
-                    format!("An error occurred while calculating the result: {}", e),
-                )
-                .await?;
-                return Ok(());
-            }
-        };
+    let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
 
-    let discord_guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
+    let members_to_ping = match drql::interpreter::interpret(
+        ast.into(),
+        &resolver,
+        &UserData {
+            guild: &guild,
+            member: &msg.member(ctx).await?,
+            ctx,
+        },
+    )
+    .await
+    {
+        Ok(ast) => ast,
+        Err(e) => {
+            msg.reply(
+                ctx,
+                format!("An error occurred while calculating the result: {}", e),
+            )
+            .await?;
+            return Ok(());
+        }
+    };
 
     // Now that we know which members we have to notify, we can do some specialized calculations
     // to try to replace members in that set with existing roles in the server. First, we choose our
     // "qualifiers" -- any role in this server that is a **subset** of our members_to_ping.
 
     // A hashmap of every role in the guild and its members.
-    let roles_and_their_members = discord_guild.all_roles_and_members(ctx)?;
+    let roles_and_their_members = guild.all_roles_and_members(ctx)?;
 
     // next, we represent the list of users as a bunch of roles containing them and one outliers set.
     let util::unionize_set::UnionizeSetResult { sets, outliers } =
