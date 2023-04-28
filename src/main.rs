@@ -353,6 +353,7 @@ async fn on_message(
     let Some(ast) = reduce_ast_chunks(
         drql::scanner::scan(msg.content.as_str())
             .map(drql::parser::parse_drql)
+            // TODO: Report errors as 'error in chunk X'?
             .collect::<Result<Vec<_>, _>>()?
             .into_iter(),
     ) else {
@@ -483,7 +484,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let framework: poise::FrameworkBuilder<Data, anyhow::Error> = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![commands::ping(), commands::about()],
+            commands: vec![commands::ping(), commands::about(), commands::debug()],
             event_handler: |ctx, event, framework, data| {
                 Box::pin(async move {
                     if let poise::Event::Message { new_message } = event {
