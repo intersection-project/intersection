@@ -18,6 +18,8 @@ pub async fn about(ctx: Context<'_>) -> Result<(), anyhow::Error> {
         " provide a native facility for\n",
         "- `A - B`: Difference -- Members with role A but *not* role B\n",
         "\n",
+        "(In place of `A` and `B`, use a role or user name, mention, or ID. If the name of a role/user contains spaces, enclose it in double quotes `\"like this.\"`)\n",
+        "\n",
         "Intersection functions by searching for messages that contain DRQL queries wrapped in @{...}",
         " and then calculating and replying to your message by pinging every user that that query matched.",
         " The bot will also attempt to ping *roles* that match the query (to help keep the resulting",
