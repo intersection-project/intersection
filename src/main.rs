@@ -22,9 +22,13 @@ use std::{
     env,
     fmt::Display,
     hash::Hash,
+    sync::Arc,
 };
 
-pub struct Data {}
+pub struct Data {
+    /// The framework.shard_manager, used to get the latency of the current shard in the ping command
+    shard_manager: Arc<serenity::Mutex<serenity::ShardManager>>,
+}
 type Context<'a> = poise::Context<'a, Data, anyhow::Error>;
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
@@ -518,7 +522,9 @@ async fn main() -> Result<(), anyhow::Error> {
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
                 println!("Finished registering global application (/) commands.");
 
-                Ok(Data {})
+                Ok(Data {
+                    shard_manager: Arc::clone(framework.shard_manager()),
+                })
             })
         });
 
