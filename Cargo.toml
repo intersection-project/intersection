@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 actix-rt = "2.8.0"
-anyhow = "1.0.70"
+anyhow = "1.0.71"
 async-recursion = "1.0.4"
 dotenvy = "0.15.7"
 json = "0.12.4"
