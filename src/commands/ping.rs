@@ -14,6 +14,7 @@ pub async fn ping(ctx: Context<'_>) -> Result<(), anyhow::Error> {
     let diff_ms = m.message().await?.timestamp.timestamp_millis()
         - new_ctx.interaction.id().created_at().timestamp_millis();
 
+    // See https://github.com/serenity-rs/serenity/blob/6e2e70766e1afbce9cd1d4b43e3c6ee3b474f0bf/examples/e05_command_framework/src/main.rs#L468
     // TODO: A lot of locking here. Could this block and be dangerous?
     let shard_manager = ctx.data().shard_manager.lock().await;
     let runners = shard_manager.runners.lock().await;
