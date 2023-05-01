@@ -309,23 +309,30 @@ async fn resolver<'a>(
     })
 }
 
-/// Find the application command `/{name}` and return `</{name}:{id of /name}>`, or `/name` if
-/// it could not be found.
-async fn mention_application_command(ctx: &serenity::Context, name: &str) -> String {
+/// Find the application command `/name` and return the string mentioning that application command.
+///
+/// If the name contains spaces, the first word is the command name and the rest is the subcommand name.
+///
+/// If the command is not found, it returns a code block containing the command name and prints
+/// a warning.
+async fn mention_application_command(ctx: &serenity::Context, command_string: &str) -> String {
+    let (command_name, _) = match command_string.split_once(' ') {
+        Some((command_name, subcommand_string)) => (command_name, Some(subcommand_string)),
+        None => (command_string, None),
+    };
+
     match serenity::model::application::command::Command::get_global_application_commands(ctx).await
     {
-        Ok(commands) => match commands.iter().find(|command| command.name == name) {
-            Some(command) => format!("</{}:{}>", name, command.id.0),
+        Ok(commands) => match commands.iter().find(|command| command.name == command_name) {
+            Some(command) => format!("</{}:{}>", command_string, command.id.0),
             None => {
-                println!("WARN (mention_application_command): Attempt to mention a slash command {} that was not found!", name);
-                format!("/{}", name)
+                println!("WARN: Attempt to mention the command \"{}\" (root command {}) which was not found!", command_string, command_name);
+                format!("`/{}`", command_string)
             }
         },
         Err(_) => {
-            println!(
-                "WARN (mention_application_command): Error looking up global application commands!"
-            );
-            format!("/{}", name)
+            println!("WARN: Error looking up global application commands!");
+            format!("`/{}`", command_string)
         }
     }
 }
