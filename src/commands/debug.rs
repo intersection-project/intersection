@@ -1,5 +1,3 @@
-use crate::UserData;
-
 use super::super::drql;
 use super::super::Context;
 use anyhow::bail;

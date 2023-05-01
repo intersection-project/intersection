@@ -192,8 +192,9 @@ async fn resolver<'a>(
             if id == guild.id.to_string() {
                 resolver(DRQLValue::StringLiteral("everyone".to_string()), data).await?
             } else {
-                let possible_member = guild.member(ctx, id.parse::<u64>()?).await;
-                let possible_role = guild.roles.get(&serenity::RoleId::from(id.parse::<u64>()?));
+                let id = id.parse::<u64>()?;
+                let possible_member = guild.member(ctx, id).await;
+                let possible_role = guild.roles.get(&serenity::RoleId::from(id));
 
                 match (possible_member, possible_role) {
                     (Ok(_), Some(_)) => bail!(
