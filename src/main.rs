@@ -11,12 +11,10 @@ lalrpop_mod!(
     parser
 );
 
-use crate::drql::{ast::Expr, interpreter::ReducerOp};
 use anyhow::{anyhow, bail};
-use async_recursion::async_recursion;
 use dotenvy::dotenv;
-use drql::ast;
-use poise::serenity_prelude as serenity;
+use drql::{ast, interpreter::InterpreterResolver};
+use poise::{async_trait, serenity_prelude as serenity};
 use std::{
     collections::{HashMap, HashSet},
     env,
@@ -137,180 +135,162 @@ impl CustomRoleImpl for serenity::Role {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-enum DRQLValue {
-    UserID(serenity::UserId),
-    RoleID(serenity::RoleId),
-    UnknownID(String),
-    StringLiteral(String),
-}
-impl From<Expr> for ReducerOp<DRQLValue> {
-    fn from(value: Expr) -> Self {
-        match value {
-            Expr::Difference(l, r) => {
-                ReducerOp::Difference(Box::new((*l).into()), Box::new((*r).into()))
-            }
-            Expr::Intersection(l, r) => {
-                ReducerOp::Intersection(Box::new((*l).into()), Box::new((*r).into()))
-            }
-            Expr::Union(l, r) => ReducerOp::Union(Box::new((*l).into()), Box::new((*r).into())),
-            Expr::RoleID(id) => ReducerOp::User(DRQLValue::RoleID(id)),
-            Expr::UserID(id) => ReducerOp::User(DRQLValue::UserID(id)),
-            Expr::UnknownID(id) => ReducerOp::User(DRQLValue::UnknownID(id)),
-            Expr::StringLiteral(id) => ReducerOp::User(DRQLValue::StringLiteral(id)),
-        }
-    }
-}
-
-/// Walk over the [Expr] type and reduce it into a set of user IDs that
-/// need to be mentioned
-#[derive(Clone)]
-struct UserData<'a> {
+/// The custom instance of the DRQL [InterpreterResolver] used for Intersection.
+struct Resolver<'a> {
     guild: &'a serenity::Guild,
     member: &'a serenity::Member,
     ctx: &'a serenity::Context,
 }
-
-#[async_recursion]
-async fn resolver<'a>(
-    value: DRQLValue,
-    data: &UserData<'a>,
-) -> anyhow::Result<HashSet<serenity::UserId>> {
-    let UserData { guild, member, ctx } = data;
-
-    Ok(match value {
-        DRQLValue::UserID(id) => HashSet::from([id]),
-        DRQLValue::RoleID(id) => {
-            if id.to_string() == guild.id.to_string() {
-                resolver(DRQLValue::StringLiteral("everyone".to_string()), data).await?
-            } else {
-                let role = guild
-                    .roles
-                    .get(&id)
-                    .ok_or(anyhow!("Unable to resolve role"))?;
-
-                role.members(guild)
-            }
-        }
-        DRQLValue::UnknownID(id) => {
-            if id == guild.id.to_string() {
-                resolver(DRQLValue::StringLiteral("everyone".to_string()), data).await?
-            } else {
-                let id = id.parse::<u64>()?;
-                let possible_member = guild.member(ctx, id).await;
-                let possible_role = guild.roles.get(&serenity::RoleId::from(id));
-
-                match (possible_member, possible_role) {
-                    (Ok(_), Some(_)) => bail!(
-                        "Somehow there was both a member and a role with the ID {}??",
-                        id
+#[async_trait]
+impl<'a> InterpreterResolver<anyhow::Error> for Resolver<'a> {
+    async fn resolve_string_literal(
+        &mut self,
+        literal: String,
+    ) -> Result<HashSet<serenity::UserId>, anyhow::Error> {
+        if literal == "everyone" || literal == "here" {
+            if !self.member.permissions(self.ctx)?.mention_everyone() {
+                bail!(
+                    concat!(
+                        "You do not have the \"Mention everyone, here, and ",
+                        "All Roles\" permission required to use the role {}."
                     ),
-
-                    (Ok(member), None) => resolver(DRQLValue::UserID(member.user.id), data).await?,
-
-                    (Err(_), Some(role)) if !member.can_mention_role(ctx, role)? => {
-                        bail!(
-                            concat!(
-                                "The role {} is not mentionable and you do not have",
-                                " the \"Mention everyone, here, and All Roles\"",
-                                " permission."
-                            ),
-                            role.name
-                        )
-                    }
-
-                    (Err(_), Some(role)) => resolver(DRQLValue::RoleID(role.id), data).await?,
-
-                    (Err(_), None) => {
-                        bail!("Unable to resolve role or member ID: {}", id)
-                    }
-                }
+                    literal
+                );
             }
-        }
-        DRQLValue::StringLiteral(s) => {
-            if s == "everyone" || s == "here" {
-                if !member.permissions(ctx)?.mention_everyone() {
-                    bail!(
-                        concat!(
-                            "You do not have the \"Mention everyone, here, and ",
-                            "All Roles\" permission required to use the role {}."
-                        ),
-                        s
-                    );
-                }
 
-                match s.as_str() {
-                    "everyone" => guild.get_everyone(),
-                    "here" => guild.get_here(),
-                    _ => unreachable!(),
-                }
-            } else {
-                let possible_members = guild
-                    .members // FIXME: what if the members aren't cached?
-                    .iter()
-                    .filter(|(_, member)| member.user.tag().to_lowercase() == s.to_lowercase())
-                    .collect::<Vec<_>>();
-                let possible_roles = guild
-                    .roles
-                    .iter()
-                    .filter(|(_, role)| role.name.to_lowercase() == s.to_lowercase())
-                    .collect::<Vec<_>>();
+            Ok(match literal.as_str() {
+                "everyone" => self.guild.get_everyone(),
+                "here" => self.guild.get_here(),
+                _ => unreachable!(),
+            })
+        } else {
+            let possible_members = self
+                .guild
+                .members // FIXME: what if the members aren't cached?
+                .iter()
+                .filter(|(_, member)| member.user.tag().to_lowercase() == literal.to_lowercase())
+                .collect::<Vec<_>>();
+            let possible_roles = self
+                .guild
+                .roles
+                .iter()
+                .filter(|(_, role)| role.name.to_lowercase() == literal.to_lowercase())
+                .collect::<Vec<_>>();
 
-                if possible_members.len() > 1 {
-                    bail!(
-                        concat!(
-                            "Multiple members matched your query for {}.",
-                            " Use their ID instead."
-                        ),
-                        s
-                    );
-                }
-                if possible_roles.len() > 1 {
-                    bail!(
-                        "Multiple roles matched your query for {}. Use their ID instead.",
-                        s
-                    );
-                }
-
-                match (possible_members.get(0), possible_roles.get(0)) {
-                    (Some(_), Some(_)) => bail!(
-                        concat!(
-                            "Found a member and role with the same name",
-                            " in your query for {}. Use their ID instead."
-                        ),
-                        s
+            if possible_members.len() > 1 {
+                bail!(
+                    concat!(
+                        "Multiple members matched your query for {}.",
+                        " Use their ID instead."
                     ),
+                    literal
+                );
+            }
+            if possible_roles.len() > 1 {
+                bail!(
+                    "Multiple roles matched your query for {}. Use their ID instead.",
+                    literal
+                );
+            }
 
-                    (Some((_, member)), None) => {
-                        resolver(DRQLValue::UserID(member.user.id), data).await?
-                    }
+            match (possible_members.get(0), possible_roles.get(0)) {
+                (Some(_), Some(_)) => bail!(
+                    concat!(
+                        "Found a member and role with the same name",
+                        " in your query for {}. Use their ID instead."
+                    ),
+                    literal
+                ),
 
-                    (None, Some((_, role))) if !member.can_mention_role(ctx, role)? => {
-                        bail!(
-                            concat!(
-                                "The role {} is not mentionable and you do not have",
-                                " the \"Mention everyone, here, and All",
-                                " Roles\" permission."
-                            ),
-                            role.name
-                        );
-                    }
+                (Some((_, member)), None) => self.resolve_user_id(member.user.id).await,
 
-                    (None, Some((_, role))) => resolver(DRQLValue::RoleID(role.id), data).await?,
+                (None, Some((_, role))) if !self.member.can_mention_role(self.ctx, role)? => {
+                    bail!(
+                        concat!(
+                            "The role {} is not mentionable and you do not have",
+                            " the \"Mention everyone, here, and All",
+                            " Roles\" permission."
+                        ),
+                        role.name
+                    );
+                }
 
-                    (None, None) => {
-                        bail!(
-                            concat!(
-                                "Unable to resolve role or member **username**",
-                                " (use a tag like \"User#1234\" and no nickname!): {}"
-                            ),
-                            s
-                        );
-                    }
+                (None, Some((_, role))) => self.resolve_role_id(role.id).await,
+
+                (None, None) => {
+                    bail!(
+                        concat!(
+                            "Unable to resolve role or member **username**",
+                            " (use a tag like \"User#1234\" and no nickname!): {}"
+                        ),
+                        literal
+                    );
                 }
             }
         }
-    })
+    }
+
+    async fn resolve_unknown_id(
+        &mut self,
+        id: String,
+    ) -> Result<HashSet<serenity::UserId>, anyhow::Error> {
+        if id == self.guild.id.to_string() {
+            self.resolve_string_literal("everyone".to_string()).await
+        } else {
+            let id = id.parse::<u64>()?;
+            let possible_member = self.guild.member(self.ctx, id).await;
+            let possible_role = self.guild.roles.get(&serenity::RoleId::from(id));
+
+            match (possible_member, possible_role) {
+                (Ok(_), Some(_)) => bail!(
+                    "Somehow there was both a member and a role with the ID {}??",
+                    id
+                ),
+
+                (Ok(member), None) => self.resolve_user_id(member.user.id).await,
+
+                (Err(_), Some(role)) if !self.member.can_mention_role(self.ctx, role)? => {
+                    bail!(
+                        concat!(
+                            "The role {} is not mentionable and you do not have",
+                            " the \"Mention everyone, here, and All Roles\"",
+                            " permission."
+                        ),
+                        role.name
+                    )
+                }
+
+                (Err(_), Some(role)) => self.resolve_role_id(role.id).await,
+
+                (Err(_), None) => {
+                    bail!("Unable to resolve role or member ID: {}", id)
+                }
+            }
+        }
+    }
+
+    async fn resolve_user_id(
+        &mut self,
+        id: serenity::UserId,
+    ) -> Result<HashSet<serenity::UserId>, anyhow::Error> {
+        Ok(HashSet::from([id]))
+    }
+
+    async fn resolve_role_id(
+        &mut self,
+        id: serenity::RoleId,
+    ) -> Result<HashSet<serenity::UserId>, anyhow::Error> {
+        if id.to_string() == self.guild.id.to_string() {
+            self.resolve_string_literal("everyone".to_string()).await
+        } else {
+            Ok(self
+                .guild
+                .roles
+                .get(&id)
+                .ok_or(anyhow!("Unable to resolve role with ID {}", id))?
+                .members(self.guild))
+        }
+    }
 }
 
 /// Find the application command `/name` and return the string mentioning that application command.
@@ -375,9 +355,8 @@ async fn on_message(
     let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
 
     let members_to_ping = match drql::interpreter::interpret(
-        ast.into(),
-        &resolver,
-        &UserData {
+        ast,
+        &mut Resolver {
             guild: &guild,
             member: &msg.member(ctx).await?,
             ctx,

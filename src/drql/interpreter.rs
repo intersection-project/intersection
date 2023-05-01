@@ -1,73 +1,48 @@
 use async_recursion::async_recursion;
-use std::{collections::HashSet, future::Future, hash::Hash};
+use poise::{
+    async_trait,
+    serenity_prelude::{RoleId, UserId},
+};
+use std::collections::HashSet;
 
-pub enum ReducerOp<User> {
-    Difference(Box<ReducerOp<User>>, Box<ReducerOp<User>>),
-    Intersection(Box<ReducerOp<User>>, Box<ReducerOp<User>>),
-    Union(Box<ReducerOp<User>>, Box<ReducerOp<User>>),
-    User(User),
+use super::ast::Expr;
+
+/// Describes a set of functions used to resolve values in [interpret].
+#[async_trait]
+pub trait InterpreterResolver<E> {
+    async fn resolve_string_literal(&mut self, literal: String) -> Result<HashSet<UserId>, E>;
+    async fn resolve_unknown_id(&mut self, id: String) -> Result<HashSet<UserId>, E>;
+    async fn resolve_user_id(&mut self, id: UserId) -> Result<HashSet<UserId>, E>;
+    async fn resolve_role_id(&mut self, id: RoleId) -> Result<HashSet<UserId>, E>;
 }
 
-/// Takes a [ReducerOp] and a function that takes the user-defined type and iterates over every
-/// value within it, and returns a [Future] that resolves to a [HashSet] of the values after
-/// calculating them as a set. This is best explained with an example:
-///
-/// ```
-/// use drql::interpreter::{ReducerOp, interpret};
-///
-/// let tree = ReducerOp::Union(
-///     Box::new(ReducerOp::User(HashSet::from([1]))),
-///     Box::new(ReducerOp::Difference(
-///         Box::new(ReducerOp::User(HashSet::from([2, 3, 4]))),
-///         Box::new(ReducerOp::User(HashSet::from([3]))),
-///     )),
-/// );
-///
-/// struct UserData;
-///
-/// async fn f(input: HashSet<u32>, _: &UserData) -> Result<HashSet<u32>, !> {
-///     Ok(input)
-/// }
-///
-/// assert_eq!(
-///     interpret(tree, &f, &UserData).await,
-///     Ok(HashSet::from([1, 2, 4])
-/// );
-/// ```
-///
-/// The "user data" is passed into `f` for all calls.
-#[must_use]
+/// Interpret a DRQL AST, deferring to the Resolver to resolve string literals, user IDs, and role IDs.
 #[async_recursion]
-pub async fn interpret<'user_data, User, Output, F, FnFut, UserData, E>(
-    node: ReducerOp<User>,
-    f: &F,
-    data: &'user_data UserData,
-) -> Result<HashSet<Output>, E>
-where
-    User: Send + Sync,
-    F: Fn(User, &'user_data UserData) -> FnFut + Send + Sync,
-    FnFut: Future<Output = Result<HashSet<Output>, E>> + Send,
-    UserData: 'user_data + Send + Sync,
-    Output: Eq + Hash + Copy + Send + Sync,
-    E: Send + Sync,
-{
+pub async fn interpret<E: Send>(
+    node: Expr,
+    resolver: &mut (impl InterpreterResolver<E> + Send),
+) -> Result<HashSet<UserId>, E> {
     Ok(match node {
-        ReducerOp::Difference(l, r) => interpret(*l, f, data)
+        Expr::Difference(l, r) => interpret(*l, resolver)
             .await?
-            .difference(&interpret(*r, f, data).await?)
+            .difference(&interpret(*r, resolver).await?)
             .copied()
             .collect::<HashSet<_>>(),
-        ReducerOp::Intersection(l, r) => interpret(*l, f, data)
+        Expr::Intersection(l, r) => interpret(*l, resolver)
             .await?
-            .intersection(&interpret(*r, f, data).await?)
+            .intersection(&interpret(*r, resolver).await?)
             .copied()
             .collect::<HashSet<_>>(),
-        ReducerOp::Union(l, r) => interpret(*l, f, data)
+        Expr::Union(l, r) => interpret(*l, resolver)
             .await?
-            .union(&interpret(*r, f, data).await?)
+            .union(&interpret(*r, resolver).await?)
             .copied()
             .collect::<HashSet<_>>(),
-        ReducerOp::User(u) => f(u, data).await?,
+
+        Expr::StringLiteral(l) => resolver.resolve_string_literal(l).await?,
+        Expr::UnknownID(id) => resolver.resolve_unknown_id(id).await?,
+        Expr::UserID(id) => resolver.resolve_user_id(id).await?,
+        Expr::RoleID(id) => resolver.resolve_role_id(id).await?,
     })
 }
 
@@ -75,25 +50,93 @@ where
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn reducers_work_as_expected() {
-        let tree = ReducerOp::Union(
-            Box::new(ReducerOp::User(HashSet::from([1]))),
-            Box::new(ReducerOp::Difference(
-                Box::new(ReducerOp::User(HashSet::from([2, 3, 4]))),
-                Box::new(ReducerOp::User(HashSet::from([3]))),
-            )),
-        );
+    mod basic_cases {
+        use super::*;
+        use anyhow::anyhow;
 
-        struct UserData;
+        // In this case, the resolver uses some basic predefined values.
+        struct Resolver {}
+        #[async_trait]
+        impl InterpreterResolver<anyhow::Error> for Resolver {
+            async fn resolve_string_literal(
+                &mut self,
+                s: String,
+            ) -> Result<HashSet<UserId>, anyhow::Error> {
+                if s == "test_ok_case" {
+                    Ok(HashSet::from([UserId(1)]))
+                } else {
+                    Err(anyhow!("error case 1"))
+                }
+            }
 
-        async fn f(input: HashSet<u32>, _: &UserData) -> Result<HashSet<u32>, ()> {
-            Ok(input)
+            async fn resolve_unknown_id(
+                &mut self,
+                id: String,
+            ) -> Result<HashSet<UserId>, anyhow::Error> {
+                if id == "0" {
+                    Ok(HashSet::from([UserId(2)]))
+                } else {
+                    Err(anyhow!("error case 2"))
+                }
+            }
+
+            async fn resolve_user_id(
+                &mut self,
+                id: UserId,
+            ) -> Result<HashSet<UserId>, anyhow::Error> {
+                if id.0 == 0 {
+                    Ok(HashSet::from([UserId(3)]))
+                } else {
+                    Err(anyhow!("error case 3"))
+                }
+            }
+
+            async fn resolve_role_id(
+                &mut self,
+                id: RoleId,
+            ) -> Result<HashSet<UserId>, anyhow::Error> {
+                if id.0 == 0 {
+                    Ok(HashSet::from([UserId(4)]))
+                } else {
+                    Err(anyhow!("error case 4"))
+                }
+            }
         }
 
-        assert_eq!(
-            interpret(tree, &f, &UserData).await,
-            Ok(HashSet::from([1, 2, 4]))
-        );
+        #[actix_rt::test]
+        async fn union_ok_case() {
+            assert_eq!(
+                interpret(
+                    Expr::Union(
+                        Box::new(Expr::StringLiteral("test_ok_case".to_string())),
+                        Box::new(Expr::Union(
+                            Box::new(Expr::UnknownID("0".to_string())),
+                            Box::new(Expr::Union(
+                                Box::new(Expr::UserID(UserId(0))),
+                                Box::new(Expr::RoleID(RoleId(0)))
+                            ))
+                        ))
+                    ),
+                    &mut Resolver {}
+                )
+                .await
+                .unwrap(),
+                HashSet::from([UserId(1), UserId(2), UserId(3), UserId(4)])
+            );
+        }
+
+        #[actix_rt::test]
+        #[should_panic = "called `Result::unwrap()` on an `Err` value: error case 1"]
+        async fn errors_bubble() {
+            let _ = interpret(
+                Expr::Union(
+                    Box::new(Expr::StringLiteral("7".to_string())),
+                    Box::new(Expr::StringLiteral("test_ok_case".to_string())),
+                ),
+                &mut Resolver {},
+            )
+            .await
+            .unwrap();
+        }
     }
 }
