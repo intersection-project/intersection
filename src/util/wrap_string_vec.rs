@@ -1,13 +1,8 @@
 use anyhow::bail;
 
-// Create a function chunk_str_vec_into_max_size that takes 3 parameters. The first parameter, 'input'
-// is a vector of strings. The second parameter, sep, is a separator. The third parameter, 'size' is
-// the maximum size to create. The function should return a vector of strings, where each element in
-// the result vector is as many elements from the input vector as possible, without going over the
-// size limit. For example, given an input of ["abc", "def", "ghi", "jkl", "mno"] and a limit of 7,
-// return ["abc def", "ghi jkl", "mno"].
-// Errors when a chunk len()>size.
-pub fn chunk_str_vec_into_max_size(
+/// Join a vector of strings with a separator, wrapping every time we would overflow the provided
+/// size.
+pub fn wrap_string_vec(
     mut input: Vec<String>,
     sep: &str,
     size: usize,
@@ -40,8 +35,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn chunk_str_vec_into_max_size_works() {
-        let result = chunk_str_vec_into_max_size(
+    fn wrap_string_vec_works() {
+        let result = wrap_string_vec(
             vec![
                 "abc".to_string(),
                 "def".to_string(),
@@ -62,7 +57,7 @@ mod tests {
             ]
         );
 
-        let result = chunk_str_vec_into_max_size(
+        let result = wrap_string_vec(
             ('A'..='Z').map(|l| l.to_string()).collect::<Vec<_>>(),
             " ",
             10,
@@ -82,9 +77,9 @@ mod tests {
     }
 
     #[test]
-    fn chunk_str_vec_into_max_size_has_overflow() {
+    fn wrap_string_vec_has_overflow() {
         assert!(matches!(
-            chunk_str_vec_into_max_size(vec!["ABCDEF".to_string()], " ", 5),
+            wrap_string_vec(vec!["ABCDEF".to_string()], " ", 5),
             Err(_)
         ));
     }

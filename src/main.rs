@@ -446,7 +446,7 @@ async fn on_message(
         )
         .await?;
     } else {
-        let messages = util::chunk_str_vec_into_max_size(stringified_mentions, " ", 2000)?;
+        let messages = util::wrap_string_vec(stringified_mentions, " ", 2000)?;
         msg.reply(
             ctx,
             format!(
