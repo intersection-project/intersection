@@ -83,10 +83,6 @@ mod tests {
 
     #[test]
     fn chunk_str_vec_into_max_size_has_overflow() {
-        println!(
-            "{:?}",
-            chunk_str_vec_into_max_size(vec!["ABCDEF".to_string()], " ", 5)
-        );
         assert!(matches!(
             chunk_str_vec_into_max_size(vec!["ABCDEF".to_string()], " ", 5),
             Err(_)
