@@ -17,7 +17,7 @@ pub async fn scan(
     let chunks = drql::scanner::scan(msg.as_str()).collect::<Vec<_>>();
 
     if chunks.is_empty() {
-        ctx.say(format!("No chunks were scanned.")).await?;
+        ctx.say("No chunks were scanned.").await?;
     } else {
         ctx.say(format!(
             "Found {} chunks:\n\n{}",

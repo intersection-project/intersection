@@ -185,7 +185,7 @@ async fn resolver<'a>(
                     .get(&id)
                     .ok_or(anyhow!("Unable to resolve role"))?;
 
-                role.members(&guild)
+                role.members(guild)
             }
         }
         DRQLValue::UnknownID(id) => {
