@@ -412,19 +412,6 @@ async fn on_message(
     // }
 
     // Now we need to split the output message into individual pings. First, stringify each user mention...
-    enum MentionType {
-        User(serenity::UserId),
-        Role(RoleType),
-    }
-    impl Display for MentionType {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                MentionType::User(id) => write!(f, "<@{}>", id),
-                MentionType::Role(role) => write!(f, "{}", role),
-            }
-        }
-    }
-
     // TODO: Once message splitting is complete this could result in a user being
     // pinged multiple times if they are present in a role that is split into multiple
     // messages.
@@ -435,9 +422,8 @@ async fn on_message(
     // double ping!
     let stringified_mentions = sets
         .into_keys()
-        .map(|x| MentionType::Role(*x))
-        .chain(outliers.into_iter().map(MentionType::User))
-        .map(|x| x.to_string())
+        .map(|role| role.to_string())
+        .chain(outliers.into_iter().map(|id| format!("<@{}>", id)))
         .collect::<Vec<_>>();
 
     if stringified_mentions.is_empty() {
