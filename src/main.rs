@@ -166,45 +166,74 @@ impl<'a> InterpreterResolver<anyhow::Error> for Resolver<'a> {
         } else {
             let possible_members = self
                 .guild
-                .members // FIXME: what if the members aren't cached?
-                .iter()
-                .filter(|(_, member)| member.user.tag().to_lowercase() == literal.to_lowercase())
-                .collect::<Vec<_>>();
+                .search_members(self.ctx, literal.as_str(), None)
+                .await?;
+
             let possible_roles = self
                 .guild
                 .roles
                 .iter()
-                .filter(|(_, role)| role.name.to_lowercase() == literal.to_lowercase())
+                .filter(|(_, role)| role.name == literal)
                 .collect::<Vec<_>>();
 
-            if possible_members.len() > 1 {
-                bail!(
-                    concat!(
-                        "Multiple members matched your query for {}.",
-                        " Use their ID instead."
-                    ),
-                    literal
-                );
+            match (possible_members.len(), possible_roles.len()) {
+                (members_matched, roles_matched) if members_matched >= 1 && roles_matched >= 1 => {
+                    bail!(
+                        concat!(
+                            "Found {} member(s) and {} role(s) that matched your query for \"{}\".",
+                            " Please narrow your query or use the ID of the object you are referring",
+                            " to instead."
+                        ),
+                        members_matched,
+                        roles_matched,
+                        literal
+                    );
+                }
+                (members_matched, _) if members_matched > 1 => {
+                    bail!(
+                        concat!(
+                            "Found {} members that matched your query for \"{}\". Please narrow your",
+                            " query: it may help to use the user's ID, or add their discriminator,",
+                            " like \"luna..♡#9082\" instead of \"luna..♡\"."
+                        ),
+                        members_matched,
+                        literal
+                    );
+                }
+                (_, roles_matched) if roles_matched > 1 => {
+                    bail!(
+                        concat!(
+                            "Found {} roles that matched your query for \"{}\". Please narrow your",
+                            " query: it may help to use a role ID instead."
+                        ),
+                        roles_matched,
+                        literal
+                    );
+                }
+                // At this point, we KNOW that members_matched and roles_matched are <= 1, and
+                // only ONE of them is 1. Let's make sure that they aren't both 0:
+                (members_matched, roles_matched) if members_matched == 0 && roles_matched == 0 => {
+                    bail!(
+                        concat!(
+                            "Unable to find a role or member with the name {}. Searches for roles",
+                            " are case sensitive! Try using the ID instead?"
+                        ),
+                        literal
+                    );
+                }
+                // Continue, members_matched + roles_matched == 1.
+                _ => {}
             }
-            if possible_roles.len() > 1 {
-                bail!(
-                    "Multiple roles matched your query for {}. Use their ID instead.",
-                    literal
-                );
-            }
 
-            match (possible_members.get(0), possible_roles.get(0)) {
-                (Some(_), Some(_)) => bail!(
-                    concat!(
-                        "Found a member and role with the same name",
-                        " in your query for {}. Use their ID instead."
-                    ),
-                    literal
-                ),
+            assert!(possible_members.len() + possible_roles.len() == 1);
 
-                (Some((_, member)), None) => self.resolve_user_id(member.user.id).await,
+            let member = possible_members.get(0);
+            let role = possible_roles.get(0).map(|(_, x)| x);
 
-                (None, Some((_, role))) if !self.member.can_mention_role(self.ctx, role)? => {
+            match (member, role) {
+                (Some(member), None) => self.resolve_user_id(member.user.id).await,
+
+                (None, Some(role)) if !self.member.can_mention_role(self.ctx, role)? => {
                     bail!(
                         concat!(
                             "The role {} is not mentionable and you do not have",
@@ -215,17 +244,10 @@ impl<'a> InterpreterResolver<anyhow::Error> for Resolver<'a> {
                     );
                 }
 
-                (None, Some((_, role))) => self.resolve_role_id(role.id).await,
+                (None, Some(role)) => self.resolve_role_id(role.id).await,
 
-                (None, None) => {
-                    bail!(
-                        concat!(
-                            "Unable to resolve role or member **username**",
-                            " (use a tag like \"User#1234\" and no nickname!): {}"
-                        ),
-                        literal
-                    );
-                }
+                // All other cases have been eliminated above.
+                _ => unreachable!(),
             }
         }
     }
