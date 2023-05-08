@@ -83,4 +83,10 @@ mod tests {
             Err(_)
         ));
     }
+
+    #[test]
+    fn wrap_string_vec_empty_input() {
+        let result = wrap_string_vec(Vec::new(), " ", 10).unwrap();
+        assert_eq!(result, Vec::<String>::new());
+    }
 }
