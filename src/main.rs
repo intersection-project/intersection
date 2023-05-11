@@ -143,7 +143,6 @@ impl serenity::EventHandler for Handler {
         }
 
         if drql::scanner::scan(msg.content.as_str()).count() > 0 {
-            // Do not bubble errors or they are classified as internal errors!
             match handle_drql_query(&ctx, &msg)
                 .await
                 .context("Error handling DRQL query")
