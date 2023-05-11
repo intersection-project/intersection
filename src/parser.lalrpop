@@ -3,9 +3,9 @@
 use crate::drql::ast;
 use crate::drql::lexer;
 use poise::serenity_prelude::model::prelude::{RoleId, UserId};
-use lalrpop_util::{ErrorRecovery, ParseError};
+use lalrpop_util::ParseError;
 
-grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, lexer::Tok, lexer::LexicalError>>);
+grammar;
 
 pub Expr: ast::Expr = {
     <left:Expr> "+" <right:Primary> => ast::Expr::Union(Box::new(left), Box::new(right)),
