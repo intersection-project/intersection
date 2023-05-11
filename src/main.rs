@@ -134,31 +134,29 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
     Ok(())
 }
 
-async fn on_message(
-    ctx: &serenity::Context,
-    msg: &serenity::Message,
-    _framework: poise::FrameworkContext<'_, Data, anyhow::Error>,
-    _data: &Data,
-) -> anyhow::Result<()> {
-    // Any errors that bubble from this function will panic! Handle errors yourself!
-    if msg.author.bot {
-        return Ok(());
-    }
+struct Handler;
+#[serenity::async_trait]
+impl serenity::EventHandler for Handler {
+    async fn message(&self, ctx: serenity::Context, msg: serenity::Message) {
+        if msg.author.bot {
+            return;
+        }
 
-    if drql::scanner::scan(msg.content.as_str()).count() > 0 {
-        // Do not bubble errors or they are classified as internal errors!
-        match handle_drql_query(ctx, msg)
-            .await
-            .context("Error handling DRQL query")
-        {
-            Ok(_) => {}
-            Err(e) => {
-                msg.reply(ctx, format!("{:#}", e)).await?;
+        if drql::scanner::scan(msg.content.as_str()).count() > 0 {
+            // Do not bubble errors or they are classified as internal errors!
+            match handle_drql_query(&ctx, &msg)
+                .await
+                .context("Error handling DRQL query")
+            {
+                Ok(_) => {}
+                Err(e) => {
+                    if let Err(e) = msg.reply(ctx, format!("{:#}", e)).await {
+                        panic!("Error sending error message: {:#}", e);
+                    }
+                }
             }
         }
     }
-
-    Ok(())
 }
 
 #[tokio::main]
@@ -170,15 +168,9 @@ async fn main() -> Result<(), anyhow::Error> {
     let framework: poise::FrameworkBuilder<Data, anyhow::Error> = poise::Framework::builder()
         .options(poise::FrameworkOptions {
             commands: vec![commands::ping(), commands::about(), commands::debug()],
-            event_handler: |ctx, event, framework, data| {
+            event_handler: |ctx, event, _, _| {
                 Box::pin(async move {
-                    if let poise::Event::Message { new_message } = event {
-                        on_message(ctx, new_message, framework, data)
-                            .await
-                            .context("Error in message handler")
-                            .unwrap(); // TODO: Better error handling? If this fn returns Result it's discarded silently...
-                    }
-
+                    event.clone().dispatch(ctx.clone(), &Handler).await;
                     Ok(())
                 })
             },
