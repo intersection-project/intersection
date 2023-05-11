@@ -14,7 +14,7 @@ lalrpop_mod!(
     parser
 );
 
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, Context as _};
 use dotenvy::dotenv;
 use extensions::CustomGuildImpl;
 use poise::serenity_prelude as serenity;
@@ -34,8 +34,7 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
     let ast = drql::scanner::scan(msg.content.as_str())
         .enumerate()
         .map(|(n, chunk)| {
-            drql::parser::parse_drql(chunk)
-                .map_err(|e| anyhow!(e).context(format!("Error parsing chunk {n}")))
+            drql::parser::parse_drql(chunk).context(format!("Error parsing chunk {n}"))
         })
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
@@ -53,7 +52,7 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
         },
     )
     .await
-    .map_err(|e| e.context("Error calculating result"))?;
+    .context("Error calculating result")?;
 
     // Now that we know which members we have to notify, we can do some specialized calculations
     // to try to replace members in that set with existing roles in the server. First, we choose our
@@ -150,7 +149,7 @@ async fn on_message(
         // Do not bubble errors or they are classified as internal errors!
         match handle_drql_query(ctx, msg)
             .await
-            .map_err(|e| e.context("Error handling DRQL query"))
+            .context("Error handling DRQL query")
         {
             Ok(_) => {}
             Err(e) => {
@@ -176,7 +175,7 @@ async fn main() -> Result<(), anyhow::Error> {
                     if let poise::Event::Message { new_message } = event {
                         on_message(ctx, new_message, framework, data)
                             .await
-                            .map_err(|e| e.context("Error in message handler"))
+                            .context("Error in message handler")
                             .unwrap(); // TODO: Better error handling? If this fn returns Result it's discarded silently...
                     }
 
