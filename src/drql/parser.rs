@@ -22,11 +22,11 @@ impl<T> Display for DrqlParserError<T> {
         match self {
             DrqlParserError::Recoverable { errors, .. } => {
                 for error in errors {
-                    writeln!(f, "{:?}", error)?;
+                    writeln!(f, "{}", error.error)?;
                 }
                 Ok(())
             }
-            DrqlParserError::Fatal(e) => write!(f, "{:?}", e),
+            DrqlParserError::Fatal(e) => write!(f, "{}", e),
         }
     }
 }

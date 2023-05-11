@@ -8,13 +8,27 @@ pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
 pub enum LexicalError {
     #[default]
     NoMatchingRule,
-    UnknownToken((usize, char), String),
+    UnknownToken((usize, char)),
     UnterminatedStringLiteral(usize),
     ParseIntError(ParseIntError),
 }
 impl From<ParseIntError> for LexicalError {
     fn from(value: ParseIntError) -> Self {
         LexicalError::ParseIntError(value)
+    }
+}
+impl std::fmt::Display for LexicalError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LexicalError::NoMatchingRule => write!(f, "No matching rule."),
+            LexicalError::UnknownToken((index, ch)) => {
+                write!(f, "Unknown token at index {index}: `{ch}`")
+            }
+            LexicalError::UnterminatedStringLiteral(index) => {
+                write!(f, "Unterminated string literal at index {index}")
+            }
+            LexicalError::ParseIntError(e) => write!(f, "ParseIntError: {}", e),
+        }
     }
 }
 
@@ -72,6 +86,24 @@ pub enum Tok {
     RawName(String),
 }
 
+impl std::fmt::Display for Tok {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Tok::Plus => write!(f, "+"),
+            Tok::Minus => write!(f, "-"),
+            Tok::Pipe => write!(f, "|"),
+            Tok::Ampersand => write!(f, "&"),
+            Tok::LeftParen => write!(f, "("),
+            Tok::RightParen => write!(f, ")"),
+            Tok::StringLiteral(s) => write!(f, "\"{}\"", s),
+            Tok::IDLiteral(s) => write!(f, "{}", s),
+            Tok::UserMention(s) => write!(f, "<@{}>", s),
+            Tok::RoleMention(s) => write!(f, "<@&{}>", s),
+            Tok::RawName(s) => write!(f, "{}", s),
+        }
+    }
+}
+
 pub struct DrqlLexer<'input> {
     lex: Lexer<'input, Tok>,
 }
@@ -94,10 +126,7 @@ impl<'input> Iterator for DrqlLexer<'input> {
         match token {
             Err(LexicalError::NoMatchingRule) => {
                 let char = slice.chars().next().unwrap();
-                Some(Err(LexicalError::UnknownToken(
-                    (span.start, char),
-                    format!("Internal error: Unknown token '{char}'"),
-                )))
+                Some(Err(LexicalError::UnknownToken((span.start, char))))
             }
             Err(e) => Some(Err(e)),
             Ok(token) => Some(Ok((span.start, token, span.end))),
@@ -132,10 +161,7 @@ mod tests {
             results,
             vec![
                 Ok((0, Tok::RawName("a".to_string()), 1)),
-                Err(LexicalError::UnknownToken(
-                    (2, '#'),
-                    "Internal error: Unknown token '#'".to_string()
-                )),
+                Err(LexicalError::UnknownToken((2, '#'))),
             ]
         );
     }

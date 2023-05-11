@@ -14,7 +14,7 @@ lalrpop_mod!(
     parser
 );
 
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use dotenvy::dotenv;
 use extensions::CustomGuildImpl;
 use poise::serenity_prelude as serenity;
@@ -26,41 +26,25 @@ pub struct Data {
 }
 type Context<'a> = poise::Context<'a, Data, anyhow::Error>;
 
-async fn on_message(
-    ctx: &serenity::Context,
-    msg: &serenity::Message,
-    _framework: poise::FrameworkContext<'_, Data, anyhow::Error>,
-    _data: &Data,
-) -> Result<(), anyhow::Error> {
-    if msg.author.bot {
-        return Ok(());
-    }
-
+async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> anyhow::Result<()> {
     if msg.guild(ctx).is_none() {
-        if drql::scanner::scan(msg.content.as_str()).count() > 0 {
-            msg.reply(
-                ctx,
-                "DRQL queries are only supported in guilds, not in DMs.",
-            )
-            .await?;
-        }
-        return Ok(());
+        bail!("DRQL queries are not available in DMs.");
     }
 
-    let Some(ast) = 
-        drql::scanner::scan(msg.content.as_str())
-            .map(drql::parser::parse_drql)
-            // TODO: Report errors as 'error in chunk X'?
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .reduce(|acc, chunk| crate::drql::ast::Expr::Union(Box::new(acc), Box::new(chunk)))
-    else {
-        return Ok(());
-    };
+    let ast = drql::scanner::scan(msg.content.as_str())
+        .enumerate()
+        .map(|(n, chunk)| {
+            drql::parser::parse_drql(chunk)
+                .map_err(|e| anyhow!(e).context(format!("Error parsing chunk {n}")))
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .reduce(|acc, chunk| crate::drql::ast::Expr::Union(Box::new(acc), Box::new(chunk)))
+        .ok_or(anyhow!("There is no DRQL query in your message to handle."))?; // This should never happen, as we already checked that there was at least one chunk in the input
 
     let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
 
-    let members_to_ping = match drql::interpreter::interpret(
+    let members_to_ping = drql::interpreter::interpret(
         ast,
         &mut resolver::Resolver {
             guild: &guild,
@@ -69,17 +53,7 @@ async fn on_message(
         },
     )
     .await
-    {
-        Ok(ast) => ast,
-        Err(e) => {
-            msg.reply(
-                ctx,
-                format!("An error occurred while calculating the result: {}", e),
-            )
-            .await?;
-            return Ok(());
-        }
-    };
+    .map_err(|e| e.context("Error calculating result"))?;
 
     // Now that we know which members we have to notify, we can do some specialized calculations
     // to try to replace members in that set with existing roles in the server. First, we choose our
@@ -161,6 +135,33 @@ async fn on_message(
     Ok(())
 }
 
+async fn on_message(
+    ctx: &serenity::Context,
+    msg: &serenity::Message,
+    _framework: poise::FrameworkContext<'_, Data, anyhow::Error>,
+    _data: &Data,
+) -> anyhow::Result<()> {
+    // Any errors that bubble from this function will panic! Handle errors yourself!
+    if msg.author.bot {
+        return Ok(());
+    }
+
+    if drql::scanner::scan(msg.content.as_str()).count() > 0 {
+        // Do not bubble errors or they are classified as internal errors!
+        match handle_drql_query(ctx, msg)
+            .await
+            .map_err(|e| e.context("Error handling DRQL query"))
+        {
+            Ok(_) => {}
+            Err(e) => {
+                msg.reply(ctx, format!("{:#}", e)).await?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     // We ignore the error because environment variables may be passed
@@ -173,10 +174,13 @@ async fn main() -> Result<(), anyhow::Error> {
             event_handler: |ctx, event, framework, data| {
                 Box::pin(async move {
                     if let poise::Event::Message { new_message } = event {
-                        on_message(ctx, new_message, framework, data).await
-                    } else {
-                        Ok(())
+                        on_message(ctx, new_message, framework, data)
+                            .await
+                            .map_err(|e| e.context("Error in message handler"))
+                            .unwrap(); // TODO: Better error handling? If this fn returns Result it's discarded silently...
                     }
+
+                    Ok(())
                 })
             },
 
