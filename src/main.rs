@@ -16,7 +16,6 @@ lalrpop_mod!(
 
 use anyhow::anyhow;
 use dotenvy::dotenv;
-use drql::ast;
 use extensions::CustomGuildImpl;
 use poise::serenity_prelude as serenity;
 use std::{env, sync::Arc};
@@ -26,11 +25,6 @@ pub struct Data {
     shard_manager: Arc<serenity::Mutex<serenity::ShardManager>>,
 }
 type Context<'a> = poise::Context<'a, Data, anyhow::Error>;
-
-/// Function to fold an iterator of ASTs into one large union expression
-fn reduce_ast_chunks(iter: impl Iterator<Item = ast::Expr>) -> Option<ast::Expr> {
-    iter.reduce(|acc, chunk| ast::Expr::Union(Box::new(acc), Box::new(chunk)))
-}
 
 async fn on_message(
     ctx: &serenity::Context,
@@ -53,13 +47,14 @@ async fn on_message(
         return Ok(());
     }
 
-    let Some(ast) = reduce_ast_chunks(
+    let Some(ast) = 
         drql::scanner::scan(msg.content.as_str())
             .map(drql::parser::parse_drql)
             // TODO: Report errors as 'error in chunk X'?
             .collect::<Result<Vec<_>, _>>()?
-            .into_iter(),
-    ) else {
+            .into_iter()
+            .reduce(|acc, chunk| crate::drql::ast::Expr::Union(Box::new(acc), Box::new(chunk)))
+    else {
         return Ok(());
     };
 
