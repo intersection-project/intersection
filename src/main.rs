@@ -1,5 +1,6 @@
 mod commands;
 mod drql;
+mod models;
 mod util;
 
 #[macro_use]
@@ -18,8 +19,6 @@ use poise::{async_trait, serenity_prelude as serenity};
 use std::{
     collections::{HashMap, HashSet},
     env,
-    fmt::Display,
-    hash::Hash,
     sync::Arc,
 };
 
@@ -28,22 +27,6 @@ pub struct Data {
     shard_manager: Arc<serenity::Mutex<serenity::ShardManager>>,
 }
 type Context<'a> = poise::Context<'a, Data, anyhow::Error>;
-
-#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
-enum RoleType {
-    Everyone,
-    Here,
-    Id(serenity::RoleId),
-}
-impl Display for RoleType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RoleType::Everyone => write!(f, "@everyone"),
-            RoleType::Here => write!(f, "@here"),
-            RoleType::Id(id) => write!(f, "<@&{}>", id),
-        }
-    }
-}
 
 /// Function to fold an iterator of ASTs into one large union expression
 fn reduce_ast_chunks(iter: impl Iterator<Item = ast::Expr>) -> Option<ast::Expr> {
@@ -75,7 +58,7 @@ trait CustomGuildImpl {
     fn all_roles_and_members(
         &self,
         ctx: &serenity::Context,
-    ) -> anyhow::Result<HashMap<RoleType, HashSet<serenity::UserId>>>;
+    ) -> anyhow::Result<HashMap<models::mention::RoleType, HashSet<serenity::UserId>>>;
 }
 impl CustomGuildImpl for serenity::Guild {
     fn get_everyone(&self) -> HashSet<serenity::UserId> {
@@ -99,10 +82,10 @@ impl CustomGuildImpl for serenity::Guild {
     fn all_roles_and_members(
         &self,
         ctx: &serenity::Context,
-    ) -> anyhow::Result<HashMap<RoleType, HashSet<serenity::UserId>>> {
+    ) -> anyhow::Result<HashMap<models::mention::RoleType, HashSet<serenity::UserId>>> {
         let mut map = HashMap::from([
-            (RoleType::Everyone, self.get_everyone()),
-            (RoleType::Here, self.get_here()),
+            (models::mention::RoleType::Everyone, self.get_everyone()),
+            (models::mention::RoleType::Here, self.get_here()),
         ]);
 
         for member in self.members.values() {
@@ -110,7 +93,7 @@ impl CustomGuildImpl for serenity::Guild {
                 "Failed to get user role data for {}",
                 member.user.id
             ))? {
-                map.entry(RoleType::Id(role.id))
+                map.entry(models::mention::RoleType::Role(role.id))
                     .or_insert_with(HashSet::new)
                     .insert(member.user.id);
             }
@@ -395,8 +378,10 @@ async fn on_message(
     // double ping!
     let stringified_mentions = sets
         .into_keys()
-        .map(|role| role.to_string())
-        .chain(outliers.into_iter().map(|id| format!("<@{}>", id)))
+        .copied()
+        .map(models::mention::Mention::Role)
+        .chain(outliers.into_iter().map(models::mention::Mention::User))
+        .map(|x| x.to_string())
         .collect::<Vec<_>>();
 
     if stringified_mentions.is_empty() {
