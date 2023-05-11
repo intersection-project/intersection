@@ -167,15 +167,10 @@ async fn main() -> Result<(), anyhow::Error> {
     let framework: poise::FrameworkBuilder<Data, anyhow::Error> = poise::Framework::builder()
         .options(poise::FrameworkOptions {
             commands: vec![commands::ping(), commands::about(), commands::debug()],
-            event_handler: |ctx, event, _, _| {
-                Box::pin(async move {
-                    event.clone().dispatch(ctx.clone(), &Handler).await;
-                    Ok(())
-                })
-            },
 
             ..Default::default()
         })
+        .client_settings(|client| client.event_handler(Handler))
         .token(env::var("TOKEN").expect("Expected a token in the environment"))
         .intents(serenity::GatewayIntents::all())
         .setup(|ctx, ready, framework| {
