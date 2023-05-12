@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::Context as _;
 use std::collections::{HashMap, HashSet};
 
 use poise::serenity_prelude as serenity;
@@ -61,7 +61,7 @@ impl CustomGuildImpl for serenity::Guild {
         ]);
 
         for member in self.members.values() {
-            for role in member.roles(ctx).ok_or(anyhow!(
+            for role in member.roles(ctx).context(format!(
                 "Failed to get user role data for {}",
                 member.user.id
             ))? {

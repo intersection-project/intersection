@@ -1,6 +1,6 @@
-use poise::serenity_prelude::ShardId;
-
 use super::super::Context;
+use anyhow::Context as _;
+use poise::serenity_prelude::ShardId;
 
 /// Check if Intersection is online
 #[poise::command(slash_command)]
@@ -20,7 +20,7 @@ pub async fn ping(ctx: Context<'_>) -> Result<(), anyhow::Error> {
         let runners = shard_manager.runners.lock().await;
         runners
             .get(&ShardId(ctx.serenity_context().shard_id))
-            .ok_or(anyhow::anyhow!("Failed to obtain current shard"))?
+            .context("Failed to obtain current shard")?
             .latency
     };
 

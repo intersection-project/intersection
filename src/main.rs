@@ -14,7 +14,7 @@ lalrpop_mod!(
     parser
 );
 
-use anyhow::{anyhow, bail, Context as _};
+use anyhow::{bail, Context as _};
 use dotenvy::dotenv;
 use extensions::CustomGuildImpl;
 use poise::serenity_prelude as serenity;
@@ -39,9 +39,9 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
         .reduce(|acc, chunk| crate::drql::ast::Expr::Union(Box::new(acc), Box::new(chunk)))
-        .ok_or(anyhow!("There is no DRQL query in your message to handle."))?; // This should never happen, as we already checked that there was at least one chunk in the input
+        .context("There is no DRQL query in your message to handle.")?; // This should never happen, as we already checked that there was at least one chunk in the input
 
-    let guild = msg.guild(ctx).ok_or(anyhow!("Unable to resolve guild"))?;
+    let guild = msg.guild(ctx).context("Unable to resolve guild")?;
 
     let members_to_ping = drql::interpreter::interpret(
         ast,

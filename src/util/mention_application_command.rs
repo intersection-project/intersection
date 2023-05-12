@@ -1,3 +1,4 @@
+use anyhow::Context as _;
 use poise::serenity_prelude as serenity;
 
 /// Find the application command `/name` and return the string mentioning that application command.
@@ -18,7 +19,7 @@ pub async fn mention_application_command(
     let command =
         serenity::model::application::command::Command::get_global_application_commands(ctx)
             .await
-            .map_err(|_| anyhow::anyhow!("Error looking up global application commands!"))?
+            .context("Error looking up global application commands!")?
             .into_iter()
             .find(|command| command.name == command_name);
 

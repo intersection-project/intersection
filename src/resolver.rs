@@ -1,6 +1,6 @@
 use crate::drql::interpreter::InterpreterResolver;
 use crate::extensions::{CustomGuildImpl, CustomMemberImpl, CustomRoleImpl};
-use anyhow::{anyhow, bail};
+use anyhow::{bail, Context as _};
 use poise::{async_trait, serenity_prelude as serenity};
 use std::collections::HashSet;
 
@@ -178,7 +178,7 @@ impl<'a> InterpreterResolver<anyhow::Error> for Resolver<'a> {
                 .guild
                 .roles
                 .get(&id)
-                .ok_or(anyhow!("Unable to resolve role with ID {}", id))?
+                .context(format!("Unable to resolve role with ID {}", id))?
                 .members(self.guild))
         }
     }
