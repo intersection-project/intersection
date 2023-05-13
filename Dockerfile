@@ -3,7 +3,7 @@ WORKDIR /app
 RUN cargo install cargo-chef
 
 FROM debian:buster-slim AS runtime
-RUN apt-get update && apt-get upgrade
+RUN apt-get update && apt-get upgrade -y
 
 FROM chef AS planner
 COPY . .
