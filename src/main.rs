@@ -96,7 +96,7 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
             "Notification triggered by Intersection.\n",
             ":question: **What is this?** Run {} for more information.\n"
         ),
-        util::mention_application_command(ctx, "about").await?
+        util::mention_application_command(ctx, "about landing").await?
     );
 
     if stringified_mentions.join(" ").len() <= (2000 - notification_string.len()) {
@@ -125,7 +125,7 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
                     "Notification triggered successfully.\n",
                     ":question: **What is this?** Run {} for more information."
                 ),
-                util::mention_application_command(ctx, "about").await?
+                util::mention_application_command(ctx, "about landing").await?
             ),
         )
         .await?;
@@ -166,7 +166,12 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let framework: poise::FrameworkBuilder<Data, anyhow::Error> = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![commands::ping(), commands::about(), commands::debug()],
+            commands: vec![
+                commands::ping(),
+                commands::about(),
+                commands::debug(),
+                commands::version(),
+            ],
 
             ..Default::default()
         })
