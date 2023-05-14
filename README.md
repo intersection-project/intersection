@@ -2,6 +2,8 @@
 
 TODO: Signal handlers so the docker runner doesn't need `--init`
 
+**BIG TODO:** WHEN WE GO OPEN SOURCE, add the repo url to Cargo.toml and update /version to link to the current git ref using build_info::PKG_REPOSITORY
+
 ## Setup/Deploy for Docker LogN-side
 
 using our fancy local repo

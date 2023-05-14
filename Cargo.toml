@@ -9,6 +9,7 @@ edition = "2021"
 actix-rt = "2.8.0"
 anyhow = "1.0.71"
 async-recursion = "1.0.4"
+chrono = "0.4.24"
 dotenvy = "0.15.7"
 json = "0.12.4"
 lalrpop-util = "0.20.0"
@@ -19,4 +20,5 @@ regex = "1.8.1"
 tokio = { version = "1.28.0", features = ["macros", "rt-multi-thread"] }
 
 [build-dependencies]
+built = { version = "0.6.0", features = ["git2", "chrono"] }
 lalrpop = { version = "0.20.0", default-features = false }

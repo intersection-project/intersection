@@ -20,6 +20,12 @@ use extensions::CustomGuildImpl;
 use poise::serenity_prelude as serenity;
 use std::{env, sync::Arc};
 
+/// Information collected when compiled, by crate `built`
+pub mod build_info {
+    // File is inserted by build.rs
+    include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
+
 pub struct Data {
     /// The framework.shard_manager, used to get the latency of the current shard in the ping command
     shard_manager: Arc<serenity::Mutex<serenity::ShardManager>>,
