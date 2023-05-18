@@ -11,17 +11,13 @@ fn crate_version(display_name: &str, crate_name: &str) -> String {
         .map(|(_, version)| format!("v{version}"));
 
     format!(
-        "[{display_name}]({crate_url}) {crate_version_string}",
-        crate_url = format!(
-            "https://crates.io/crates/{crate_name}{optional_crate_version}",
-            optional_crate_version = match &version {
-                None => "".to_string(),
-                Some(version) => format!("/{}", version),
-            }
-        ),
+        "[{display_name}](https://crates.io/crates/{crate_name}{crate_version_suffix}) {crate_version_string}",
+        crate_version_suffix = match &version {
+            None => "".to_string(),
+            Some(version) => format!("/{}", version),
+        },
         crate_version_string = version
             .unwrap_or("(unknown version)".to_string())
-            .to_string()
     )
 }
 

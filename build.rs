@@ -1,6 +1,6 @@
 fn main() {
     built::write_built_file_with_opts(
-        &built::Options::default().set_dependencies(true),
+        built::Options::default().set_dependencies(true),
         std::env::var("CARGO_MANIFEST_DIR")
             .expect("Expected CARGO_MANIFEST_DIR in the environment")
             .as_ref(),
