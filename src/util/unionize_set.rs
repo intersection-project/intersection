@@ -2,8 +2,12 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
 /// Results from [unionize_set].
-#[derive(Debug)]
-pub struct UnionizeSetResult<'a, Key, Value> {
+#[derive(Debug, PartialEq)]
+pub struct UnionizeSetResult<'a, Key, Value>
+where
+    Key: PartialEq + Eq + Hash,
+    Value: PartialEq + Eq + Hash,
+{
     pub sets: HashMap<&'a Key, &'a HashSet<Value>>,
     pub outliers: HashSet<Value>,
 }
@@ -91,49 +95,140 @@ where
 mod tests {
     use super::*;
 
+    /// Target: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
+    /// Input set 0: {1, 2, 3}
+    /// Input set 1: {4, 5, 6}
+    /// Input set 2: {7, 8, 9}
+    /// Output sets: [R0, R1, R2]
+    /// Output outliers: {10, 11, 12}
     #[test]
-    fn unionize_set_works_with_superset_of_all() {
-        let target = HashSet::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    fn unionize_set_works_with_no_overlap() {
+        let target = (1..=12).collect::<HashSet<_>>();
         let preexisting_sets = HashMap::from([
-            ("empty set", HashSet::from([])),
-            ("not a subset", HashSet::from([1, 32, 5, 2, 6])),
-            (
-                "exact match",
-                HashSet::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-            ),
+            ("1..=3", HashSet::from([1, 2, 3])),
+            ("4..=6", HashSet::from([4, 5, 6])),
+            ("7..=9", HashSet::from([7, 8, 9])),
+        ]);
+
+        assert_eq!(
+            unionize_set(&target, &preexisting_sets),
+            UnionizeSetResult {
+                sets: HashMap::from([
+                    preexisting_sets.get_key_value("1..=3").unwrap(),
+                    preexisting_sets.get_key_value("4..=6").unwrap(),
+                    preexisting_sets.get_key_value("7..=9").unwrap()
+                ]),
+                outliers: HashSet::from([10, 11, 12])
+            }
+        );
+    }
+
+    /// Target: {1, 2, 3}
+    /// No input sets
+    /// Output sets: []
+    /// Output outliers: {1, 2, 3}
+    #[test]
+    fn unionize_set_works_given_no_input_sets() {
+        let target = HashSet::from([1, 2, 3]);
+        let preexisting_sets: HashMap<&str, HashSet<i32>> = HashMap::new();
+
+        assert_eq!(
+            unionize_set(&target, &preexisting_sets),
+            UnionizeSetResult {
+                sets: HashMap::new(),
+                outliers: HashSet::from([1, 2, 3])
+            }
+        );
+    }
+
+    /// Target: {1, 2, 3}
+    /// Input set 0: {2, 3, 7}
+    /// Output sets: []
+    /// Output outliers: {1, 2, 3}
+    #[test]
+    fn unionize_set_ignores_non_subsets_of_target() {
+        let target = HashSet::from([1, 2, 3]);
+        let preexisting_sets = HashMap::from([("not a subset", HashSet::from([2, 3, 7]))]);
+
+        assert_eq!(
+            unionize_set(&target, &preexisting_sets),
+            UnionizeSetResult {
+                sets: HashMap::new(),
+                outliers: HashSet::from([1, 2, 3])
+            }
+        );
+    }
+
+    /// Target: {1, 2, 3}
+    /// Input set 0: {1, 2, 3}
+    /// Input set 1: {1, 2, 3}
+    /// Output sets: [R0] or [R1] (either solution is correct)
+    /// Output outliers: {}
+    #[test]
+    fn unionize_set_works_with_equal_sets() {
+        let target = HashSet::from([1, 2, 3]);
+        let preexisting_sets = HashMap::from([
+            ("A", HashSet::from([1, 2, 3])),
+            ("B", HashSet::from([1, 2, 3])),
         ]);
 
         let UnionizeSetResult { sets, outliers } = unionize_set(&target, &preexisting_sets);
         assert_eq!(outliers.len(), 0);
+        assert_eq!(sets.len(), 1);
+        assert!(sets.get(&"A").is_some() || sets.get(&"B").is_some());
+    }
+
+    /// Target: {1, 2, 3, 4, 5}
+    /// Input set 0: {1, 2, 3, 4}
+    /// Input set 1: {2, 3}
+    /// Input set 2: {4, 5}
+    /// Output sets: [R0, R2] (R1 is redundant)
+    /// Output outliers: {}
+    #[test]
+    fn unionize_set_removes_redundant_sets() {
+        let target = HashSet::from([1, 2, 3, 4, 5]);
+        let preexisting_sets = HashMap::from([
+            ("A", HashSet::from([1, 2, 3, 4])),
+            ("B", HashSet::from([2, 3])),
+            ("C", HashSet::from([4, 5])),
+        ]);
+
         assert_eq!(
-            sets,
-            HashMap::from([(
-                &"exact match",
-                &HashSet::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-            )])
+            unionize_set(&target, &preexisting_sets),
+            UnionizeSetResult {
+                sets: HashMap::from([
+                    preexisting_sets.get_key_value("A").unwrap(),
+                    preexisting_sets.get_key_value("C").unwrap()
+                ]),
+                outliers: HashSet::new()
+            }
         );
     }
 
+    /// Target: {1, 2, 3, 4}
+    /// Input set 0: {1, 2}
+    /// Input set 1: {2, 3}
+    /// Input set 2: {3, 4}
+    /// Output sets: [R0, R2] (R1 is redundant)
+    /// Output outliers: {}
     #[test]
-    fn unionize_set_works() {
-        let target = HashSet::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    fn unionize_set_works_with_overlap() {
+        let target = HashSet::from([1, 2, 3, 4]);
         let preexisting_sets = HashMap::from([
-            ("empty set", HashSet::from([])), // gets optimized away
-            ("not a subset", HashSet::from([1, 32, 5, 2, 6])), // gets disqualified
-            ("subset of A", HashSet::from([1, 2, 3, 4])), // gets optimized away
-            ("A", HashSet::from([1, 2, 3, 4, 5, 8])), // kept
-            ("other subset of A", HashSet::from([4, 1, 8])), // gets optimized away
-            ("B", HashSet::from([5, 9])),     // kept
+            ("A", HashSet::from([1, 2])),
+            ("B", HashSet::from([2, 3])),
+            ("C", HashSet::from([3, 4])),
         ]);
 
-        let UnionizeSetResult { sets, outliers } = unionize_set(&target, &preexisting_sets);
-        assert_eq!(outliers, HashSet::from([6, 7, 10]));
         assert_eq!(
-            sets,
-            HashMap::from([
-                (&"A", &HashSet::from([1, 2, 3, 4, 5, 8])),
-                (&"B", &HashSet::from([5, 9]))
-            ])
+            unionize_set(&target, &preexisting_sets),
+            UnionizeSetResult {
+                sets: HashMap::from([
+                    preexisting_sets.get_key_value("A").unwrap(),
+                    preexisting_sets.get_key_value("C").unwrap()
+                ]),
+                outliers: HashSet::new()
+            }
         );
     }
 }
