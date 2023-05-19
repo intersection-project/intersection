@@ -54,15 +54,13 @@ where
         .filter(|(_, set)| set.is_subset(target))
         .map(|(k, v)| (*k, v.clone()))
         .collect::<HashMap<_, _>>();
-
     let mut cloned_target = target.clone();
-
     let mut output_keys: HashSet<Key> = HashSet::new();
 
-    while cloned_sets.values().any(|set| set.len() > 0) {
+    while cloned_sets.values().any(|set| !set.is_empty()) {
         let max_size = cloned_sets
-            .iter()
-            .map(|(_, set)| set.len())
+            .values()
+            .map(|set| set.len())
             .max()
             .expect("cloned_sets is empty"); // This should never happen, as the .any() call would fail
 
@@ -138,7 +136,7 @@ where
         };
 
         // selected_set is now the set we'd like to use. we can add it to our output:
-        output_keys.insert(selected_set.0.clone());
+        output_keys.insert(*selected_set.0);
 
         let cloned = selected_set.1.clone();
 
