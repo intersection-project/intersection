@@ -85,10 +85,14 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
     // message 2: @C @D ...
     // double ping!
     let stringified_mentions = sets
-        .into_keys()
+        .into_iter()
         .copied()
         .map(models::mention::Mention::Role)
-        .chain(outliers.into_iter().map(models::mention::Mention::User))
+        .chain(
+            outliers
+                .into_iter()
+                .map(|&id| models::mention::Mention::User(id)),
+        )
         .map(|x| x.to_string())
         .collect::<Vec<_>>();
 

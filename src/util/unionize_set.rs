@@ -8,8 +8,8 @@ where
     Key: PartialEq + Eq + Hash,
     Value: PartialEq + Eq + Hash,
 {
-    pub sets: HashMap<&'a Key, &'a HashSet<Value>>,
-    pub outliers: HashSet<Value>,
+    pub sets: HashSet<&'a Key>,
+    pub outliers: HashSet<&'a Value>,
 }
 
 /// "Optimize" a set, representing it as the union of pre-existing sets and one "outliers" set.
@@ -77,16 +77,17 @@ where
         .values()
         .copied() // TODO: remove copy
         .flatten()
-        .copied() // TODO: remove copy
         .collect::<HashSet<_>>();
 
     let outliers = target
+        .iter()
+        .collect::<HashSet<_>>()
         .difference(&union_of_qualifiers)
         .copied() // TODO: remove copy
         .collect::<HashSet<_>>();
 
     UnionizeSetResult {
-        sets: optimized_qualifiers,
+        sets: optimized_qualifiers.into_keys().collect::<HashSet<_>>(),
         outliers,
     }
 }
@@ -113,12 +114,8 @@ mod tests {
         assert_eq!(
             unionize_set(&target, &preexisting_sets),
             UnionizeSetResult {
-                sets: HashMap::from([
-                    preexisting_sets.get_key_value("1..=3").unwrap(),
-                    preexisting_sets.get_key_value("4..=6").unwrap(),
-                    preexisting_sets.get_key_value("7..=9").unwrap()
-                ]),
-                outliers: HashSet::from([10, 11, 12])
+                sets: HashSet::from([&"1..=3", &"4..=6", &"7..=9"]),
+                outliers: HashSet::from([&10, &11, &12])
             }
         );
     }
@@ -135,8 +132,8 @@ mod tests {
         assert_eq!(
             unionize_set(&target, &preexisting_sets),
             UnionizeSetResult {
-                sets: HashMap::new(),
-                outliers: HashSet::from([1, 2, 3])
+                sets: HashSet::new(),
+                outliers: HashSet::from([&1, &2, &3])
             }
         );
     }
@@ -153,8 +150,8 @@ mod tests {
         assert_eq!(
             unionize_set(&target, &preexisting_sets),
             UnionizeSetResult {
-                sets: HashMap::new(),
-                outliers: HashSet::from([1, 2, 3])
+                sets: HashSet::new(),
+                outliers: HashSet::from([&1, &2, &3])
             }
         );
     }
@@ -175,7 +172,7 @@ mod tests {
         let UnionizeSetResult { sets, outliers } = unionize_set(&target, &preexisting_sets);
         assert_eq!(outliers.len(), 0);
         assert_eq!(sets.len(), 1);
-        assert!(sets.get(&"A").is_some() || sets.get(&"B").is_some());
+        assert!(sets == HashSet::from([&"A"]) || sets == HashSet::from([&"B"]));
     }
 
     /// Target: {1, 2, 3, 4, 5}
@@ -196,10 +193,7 @@ mod tests {
         assert_eq!(
             unionize_set(&target, &preexisting_sets),
             UnionizeSetResult {
-                sets: HashMap::from([
-                    preexisting_sets.get_key_value("A").unwrap(),
-                    preexisting_sets.get_key_value("C").unwrap()
-                ]),
+                sets: HashSet::from([&"A", &"C"]),
                 outliers: HashSet::new()
             }
         );
@@ -223,10 +217,7 @@ mod tests {
         assert_eq!(
             unionize_set(&target, &preexisting_sets),
             UnionizeSetResult {
-                sets: HashMap::from([
-                    preexisting_sets.get_key_value("A").unwrap(),
-                    preexisting_sets.get_key_value("C").unwrap()
-                ]),
+                sets: HashSet::from([&"A", &"C"]),
                 outliers: HashSet::new()
             }
         );
