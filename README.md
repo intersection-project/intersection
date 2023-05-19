@@ -1,4 +1,11 @@
-# The Intersection Project
+<div align="center">
+
+# The Intersection Project - Discord mentions, supercharged.
+
+</div>
+
+Intersection is a Discord bot and software suite that empowers Discord's @-mentions with advanced
+concepts with their roots in set theory, such as taking the **intersection** of two roles.
 
 TODO: Signal handlers so the docker runner doesn't need `--init`
 
