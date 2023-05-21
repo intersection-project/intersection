@@ -14,7 +14,7 @@ fn crate_version(display_name: &str, crate_name: &str) -> String {
         "[{display_name}](https://crates.io/crates/{crate_name}{crate_version_suffix}) {crate_version_string}",
         crate_version_suffix = match &version {
             None => "".to_string(),
-            Some(version) => format!("/{}", version),
+            Some(version) => format!("/{}", &version[1..]),
         },
         crate_version_string = version
             .unwrap_or("(unknown version)".to_string())
