@@ -8,38 +8,40 @@ where
     Key: PartialEq + Eq + Hash,
     Value: PartialEq + Eq + Hash,
 {
+    /// The keys within `preexisting_sets` that were used to create the output set
     pub sets: HashSet<&'a Key>,
+    /// Those values not included when you calculate the union of all sets in `sets` versus `target`
     pub outliers: HashSet<&'a Value>,
 }
 
-/// "Optimize" a set, representing it as the union of pre-existing sets and one "outliers" set.
+/// Represent a set as the union of many other pre-existing sets
 ///
-/// Given the following:
-/// - A target set to represent
-/// - A HashMap of pre-existing HashSets
+/// This function solves the so-called "Intersection Set Reduction Problem" as described by #16.
 ///
-/// This function will return two HashSets:
-/// - A set of keys within the HashMap
-/// - The "outliers" set
+/// Given two inputs, a "target" set and many "pre-existing" sets, return those sets within the
+/// "pre-existing" list and one "outliers" set such that when the union of all of the returned pre-existing
+/// sets and the outliers are taken, it exactly equals the target set.
 ///
-/// The purpose of this function is to take the input set and calculate which pre-existing sets
-/// which when the union of all of them along with the outliers set is calculated, will exactly
-/// equal the target set. This is better described using an example from this project: Intersection
-/// calculates a set of user IDs that must be mentioned, but the long message that might be a result
-/// of a long DRQL query would not be very user-friendly. This function is passed the target users,
-/// and a HashMap of every role in the server, and it outputs the roles that can be mentioned to
-/// closely represent the target users in as few mentions as possible. In some cases, there will not
-/// be a perfect representation, and the outliers set represents those that were not included.
+/// This function takes a HashMap of keys to pre-existing sets and returns keys from that HashMap.
 ///
-/// This function is a best-effort optimization, and speed is a CRITICAL priority, meaning some
-/// small details may not be accounted for in the interest of rare cases. The output from this
-/// function may change without notice.
+/// You may be confused as to how this function is used within Intersection: It's quite simple, actually.
+/// Given a list of Discord users to @-mention (the target set) and every role within the server (the
+/// pre-existing sets), determine which roles (the output set of pre-existing sets) and members (the outliers)
+/// to mention. The goal is to return as few mentions in the message as possible to keep it short, so this
+/// function achieves that goal. The "optimal" solution for any given problem is where the total number
+/// of returned sets plus the total number of outliers is as small as possible. You can read more about the
+/// actual problem in issue #16, which also describes the many methods of implementing it.
 ///
-/// TODO: Example
-/// TODO: Is this ALWAYS correct? Prove it!
+/// This has not been proven to be the exact most optimal solution, and that's not the primary goal currently.
+/// The main goal of this function is to be as fast and performant as possible, while still providing an _almost_
+/// complete solution. You can read about all of the possible methods that were considered for this algorithm in
+/// issue #16 and PR #18.
 ///
-/// RFC in #16
-/// PR in #18
+// TODO: What's the time complexity of this?
+// TODO: Is this a _perfect_ solution? Proof would be nice.
+///
+/// Again, this is a best-effort optimization and some cases might be missed. Please contribute or let us know
+/// if you're able to find an edge case we haven't considered.
 pub fn unionize_set<'a, Key, Value>(
     target: &'a HashSet<Value>,
     preexisting_sets: &'a HashMap<Key, HashSet<Value>>,
