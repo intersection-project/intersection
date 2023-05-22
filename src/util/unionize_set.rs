@@ -50,6 +50,52 @@ where
     Key: PartialEq + Eq + Hash + Copy,
     Value: PartialEq + Eq + Hash + Copy,
 {
+    // This function takes the un-named and unknown time complexity approach that we believe (not
+    // yet proven) is optimal from issue #16. This is a best-effort optimization and some cases
+    // may miss some edge cases.
+
+    // As a quick summary, this implementation works by picking the largest set from 'preexisting_sets' (filtered
+    // so that only those sets that are a subset of our target exist)
+    // (we will talk about what to do when there is multiple sets with the same length later) and adding
+    // it to our output. Then, we remove those values in that set from every other set in our clone of 'preexisting_sets'
+    // and from our clone of 'target'. We repeat this process until all sets are empty. The remaining values in
+    // 'target' are our outliers.
+    //
+    // If we encounter two or more sets with the same size, we choose whichever one has the most elements
+    // that are unique to ONLY that set relative to all of the other sets with the same length. If there
+    // is a tie here, either element may be chosen. Here's some examples:
+    //
+    // Target  * * * *
+    // ---------------
+    //  Set 0  * *
+    //  Set 1    * *
+    //  Set 2      * *
+    //
+    // The optimal choice here is sets 0 and 2. Choosing set 1 will not work as it will result in the
+    // non-optimal solution of [0, 1, 2] as the output sets...
+    //
+    // First iteration, select set 1 as spoken above
+    // New state: target=[A, D], set 0=[A], set 1=[], set 2=[D]
+    // Second iteration, select set 0 or 1, ... the ending result will be all 3 sets. The optimal
+    // solution is only set 0 and 2.
+    //
+    // In our case, we simply select whichever set has the most UNIQUE elements ('x': not unique)
+    //
+    // Target  * * * *
+    // ---------------
+    //  Set 0  * x
+    //  Set 1    x x
+    //  Set 2      x *
+    //
+    // Then we can see that set 0 or set 2 have the most unique elements and select either one, leading
+    // to the correct solution.
+    //
+    // The other issue with the old approach existed when two sets are equal. In this case, there is
+    // still a tie with the "unique" counts and we can select either one (even though the values are
+    // both 0). This is fine, as the sets are equal and we can select either one.
+    // That's all!
+
+    // TODO: Re-implement with new comments
     // A clone of every one of the preexisting sets, excluding those that aren't subsets of target
     let mut cloned_sets = preexisting_sets
         .iter()
