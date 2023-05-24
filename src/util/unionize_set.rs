@@ -1,3 +1,4 @@
+use bitvec::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
@@ -42,6 +43,10 @@ where
 ///
 /// Again, this is a best-effort optimization and some cases might be missed. Please contribute or let us know
 /// if you're able to find an edge case we haven't considered.
+///
+/// ## Panics
+///
+/// Panics if the total number of unique Values in preexisting_sets and target is greater than usize::MAX.
 pub fn unionize_set<'a, Key, Value>(
     target: &'a HashSet<Value>,
     preexisting_sets: &'a HashMap<Key, HashSet<Value>>,
@@ -50,6 +55,17 @@ where
     Key: PartialEq + Eq + Hash + Copy,
     Value: PartialEq + Eq + Hash + Copy,
 {
+    // There's a fuzz test below that you can run (#[ignore]d by default) to try HUGE data sizes,
+    // but we don't run by default as it takes 45+ seconds to run
+
+    // Filter out those preexisting_sets that aren't subsets of target
+    // FIXME: This step takes around 8 seconds with the large fuzz test that's found below.
+    //        Probably the is_subset?
+    let filtered_preexisting_sets = preexisting_sets
+        .iter()
+        .filter(|(_, set)| set.is_subset(target))
+        .collect::<HashMap<_, _>>();
+
     // This function takes the un-named and unknown time complexity approach that we believe (not
     // yet proven) is optimal from issue #16. This is a best-effort optimization and some cases
     // may miss some edge cases.
@@ -93,110 +109,193 @@ where
     // The other issue with the old approach existed when two sets are equal. In this case, there is
     // still a tie with the "unique" counts and we can select either one (even though the values are
     // both 0). This is fine, as the sets are equal and we can select either one.
-    // That's all!
+    // That's the gist of it. Again, read issue #16 for more information.
 
-    // TODO: Re-implement with new comments
-    // A clone of every one of the preexisting sets, excluding those that aren't subsets of target
-    let mut cloned_sets = preexisting_sets
+    // Before trying to work on this code, examine the original solution from PR #18.
+    // This function is very optimization heavy. One of the main optimizations we will be making here
+    // is using a bitfield to represent the pre-existing sets to make the "difference" operation
+    // that is performed later much more efficient:
+    //
+    // target: 0, 1, 2, 3
+    // set 0:     1, 2
+    // set 1:     1, 2, 3
+    //
+    // real representations:
+    // target: 1111
+    // set 0:  0110
+    // set 1:  0111
+    //
+    // then, once we choose set 1 we can simply just use filter(set) = set & ~set 1 to remove
+    // all of those elements (0b1111 & ~0b0100 = 0b1011, it's like a not operation)
+    // because the total number is unknown at compile time, we use a "BitVec" which is like a dynamic
+    // sized bitfield. This is implemented in the bitvec crate.
+    //
+    // In our case, we're not using numbers, they're IDs. We must first create a mapping between
+    // Key and usize. This creates an issue where if the total number of unique Value-s in all of the
+    // sets and target is greater than usize::MAX, we'll need to panic.
+
+    // First, build the mappings between a Value and some i32.
+    // FIXME: This step takes 10 seconds with the large fuzz test which is #[ignore]d below
+    let mut next_id: usize = 0;
+    let (value_to_index, index_to_value) = filtered_preexisting_sets
+        .values()
+        .copied()
+        .flatten()
+        .chain(target)
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .map(|value| {
+            let id = next_id;
+            next_id = next_id
+                .checked_add(1)
+                .expect("too many unique values, overflowed usize::MAX");
+            ((value, id), (id, value))
+        })
+        .unzip::<_, _, HashMap<_, _>, HashMap<_, _>>();
+
+    // We can now construct the bitfield for each set and target. Let's start by building target.
+    // First, we can create an all-zeroed bitfield of some size:
+    let mut target_bitfield = {
+        let mut bitfield = bitvec![0; next_id];
+
+        // Now, for every value in target, we set it to 1 in our bitfield
+        for value in target {
+            let index = value_to_index
+                .get(value)
+                .expect("value not in value_to_index");
+            bitfield.set(*index, true);
+        }
+
+        bitfield
+    };
+
+    // And now, we can map every preexisting_set to a bitfield...
+    // FIXME: This step takes 10 seconds with the large fuzz test which is #[ignore]d below
+    let mut preexisting_set_bitfields = filtered_preexisting_sets
         .iter()
-        .filter(|(_, set)| set.is_subset(target))
-        .map(|(k, v)| (*k, v.clone()))
+        .map(|(key, set)| {
+            (key, {
+                let mut bitfield = bitvec![0; next_id];
+
+                for value in set.iter() {
+                    let index = value_to_index
+                        .get(value)
+                        .expect("value not in value_to_index");
+                    bitfield.set(*index, true);
+                }
+
+                bitfield
+            })
+        })
         .collect::<HashMap<_, _>>();
-    let mut cloned_target = target.clone();
+
+    // The keys that will be returned in the end
     let mut output_keys: HashSet<Key> = HashSet::new();
 
-    while cloned_sets.values().any(|set| !set.is_empty()) {
-        let max_size = cloned_sets
+    while preexisting_set_bitfields
+        .values()
+        .any(|bitfield| bitfield.any())
+    {
+        // First, we find whatever the highest number of 1s in any bitfield is
+        let max_size = preexisting_set_bitfields
             .values()
-            .map(|set| set.len())
+            .map(|bitfield| bitfield.count_ones())
             .max()
-            .expect("cloned_sets is empty"); // This should never happen, as the .any() call would fail
+            .expect("preexisting_set_bitfields is empty"); // This should never happen, as the .any() call would return false
 
-        let sets_with_max_size = cloned_sets
+        // Then, we find all of the bitfields that have that many 1s
+        let bitfields_with_max_size = preexisting_set_bitfields
             .iter()
-            .filter(|(_, set)| set.len() == max_size)
+            .filter(|(_, bitfield)| bitfield.count_ones() == max_size)
             .collect::<Vec<_>>();
 
-        // Depending on how many sets we have...
-        // All of the sets in sets_with_max_size have the same length.
-        // We must pick ONE set to work with. There is a few possible cases for the interaction between
-        // two sets:
-        // - EQUALITY: Both sets are exactly equal (a == b)
-        // - OVERLAP: Some items are shared between each set (cardinality(a intersection b) != 0)
-        // - DISTINCTION: No items are shared between each set (card(a intersection b) == 0)
-        // If we can find at least one DISTINCT set from all of the "conflicting" sets (those in
-        // sets_with_max_size) then we can use any of those sets. If there is no distinct set, then
-        // we will select whichever set has the most unique elements in it (the set with the least
-        // overlapping elements). If there is a NON-ZERO tie, any selection works. If all sets unique counts are 0,
-        // we can choose any set because they must all be equal.
-        let selected_set = match sets_with_max_size.len() {
-            // REACHABILITY: This is unreachable as the .max() call would return None
+        // Depending on how many bitfields we have with the maximum size, there's a few different
+        // ways we could handle this.
+        //
+        // We must choose only ONE set to work with. There's 3 possibilities for the interaction
+        // between two sets:
+        // - EQUALITY (A == B): Both sets are exactly equal
+        // - OVERLAP (cardinality(a intersection b) != 0): There is some overlap between two sets
+        //   but they are not exactly equal or different.
+        // - DISTINCTION (cardinality(a intersection b) == 0): There is no overlap between two sets
+        //   at all.
+        //
+        // First of all, let's handle the most common case of there being no conflict:
+        let selected_set = match bitfields_with_max_size.len() {
+            // This is unreachable as the .max() call must have had to fail (there's no way that suddenly
+            // no set has that length)
             0 => unreachable!(),
-            1 => {
-                // There is no conflict, we can use this set!
-                // this cannot panic as len>1 implies that there is at least one element
-                sets_with_max_size[0]
-            }
+            // The most common case: There is no conflict, we can use this set!
+            1 => bitfields_with_max_size[0],
+            // Anything else...
             _ => {
-                // A set is distinct if it is not a subset of the union of all other sets within
-                // sets_with_max_size.
-
-                // Get the union of all sets within sets_with_max_size except for a specific index
-                let union_of_all_sets_except = |index: usize| {
-                    sets_with_max_size
+                // First of all, if there is any distinct set within our conflicting sets, we should
+                // choose any one of those sets.
+                // A set is "distinct" if the intersection of that set and the union of all conflicting
+                // sets has a cardinality (length) of 0.
+                // First, we can set something up to find the union of all bitfields in conflicting_sets
+                // except for a specific index:
+                let union_of_all_bitfields_except = |index: usize| {
+                    bitfields_with_max_size
                         .iter()
                         .enumerate()
                         .filter(|(i, _)| *i != index)
-                        .map(|(_, (_, set))| set)
-                        .copied()
-                        .flatten()
-                        .collect::<HashSet<_>>()
+                        .map(|(_, (_, v))| v)
+                        .fold(bitvec![0; next_id], |acc, bitfield| acc | *bitfield)
                 };
 
+                // We can then determine if a set is distinct...
                 let is_distinct = |index: usize| {
-                    !sets_with_max_size[index]
-                        .1
-                        .iter()
-                        .collect::<HashSet<_>>()
-                        .is_subset(&union_of_all_sets_except(index))
+                    // The order here appears flipped because BitVec has an impl for BitVec & &BitVec
+                    // but not &BitVec & BitVec
+                    (union_of_all_bitfields_except(index) & bitfields_with_max_size[index].1)
+                        .count_ones()
+                        == 0
                 };
 
                 // Find the first distinct set, if any
-                let first_distinct_set = sets_with_max_size
+                let first_distinct_set = bitfields_with_max_size
                     .iter()
                     .enumerate()
                     .find(|(i, _)| is_distinct(*i));
 
                 match first_distinct_set {
                     // If there is a distinct set, use it
-                    Some((i, _)) => sets_with_max_size[i],
-                    // Otherwise, use the set with the most unique elements
-                    None => *sets_with_max_size
-                        .iter()
-                        .max_by_key(|(_, set)| {
-                            set.iter()
-                                .filter(|&x| !union_of_all_sets_except(0).contains(x))
-                                .count()
-                        })
-                        .expect("sets_with_max_size is empty"), // This should never happen, as the .any() call would fail
+                    Some((i, _)) => bitfields_with_max_size[i],
+
+                    None => {
+                        // Otherwise, we find whichever set has the most elements unique to just
+                        // that set relative to the conflicting sets and choose that one.
+                        // The elements unique to a set A given B and C is just A & ~(B | C).
+                        *bitfields_with_max_size
+                            .iter()
+                            .enumerate()
+                            .max_by_key(|(index, (_, bitfield))| {
+                                // The order here appears flipped because BitVec has an impl for BitVec & &BitVec
+                                // but not &BitVec & BitVec
+                                (!union_of_all_bitfields_except(*index) & *bitfield).count_ones()
+                            })
+                            .expect("bitfields_with_max_size is empty")
+                            .1 // unreachable as the unreachable!() at 0 above would be called
+                    }
                 }
             }
         };
 
-        // selected_set is now the set we'd like to use. we can add it to our output:
-        output_keys.insert(*selected_set.0);
+        output_keys.insert(***selected_set.0);
 
-        let cloned = selected_set.1.clone();
-
-        // Remove all of the values in selected_set.1 from every set in cloned sets
-        cloned_sets = cloned_sets
-            .into_iter()
-            .map(|(k, set)| (k, set.difference(&cloned).copied().collect()))
-            .collect();
-        cloned_target = cloned_target.difference(&cloned).copied().collect();
+        // Now, we set the target bitfield to itself minus the values in selected_set.1:
+        // TODO: Should we avoid cloning here? Excessive benchmark tests don't show this as a bottleneck
+        // Cloning here is required for the '!' operator to work
+        target_bitfield = target_bitfield & !selected_set.1.clone();
+        let new_preexisting_set_bitfields = preexisting_set_bitfields
+            .iter()
+            .map(|(key, bitfield)| (*key, !selected_set.1.clone() & bitfield))
+            .collect::<HashMap<_, _>>();
+        preexisting_set_bitfields = new_preexisting_set_bitfields;
     }
 
-    // Outliers = cloned_target
+    // Outliers = remaining in target
     // Output sets = output_keys
     UnionizeSetResult {
         // Map each key back to its original in preexisting_sets - this is just to convert from
@@ -205,14 +304,15 @@ where
             .into_iter()
             .map(|key| preexisting_sets.get_key_value(&key).unwrap().0)
             .collect(),
-        // Ditto
-        outliers: cloned_target
-            .into_iter()
-            .map(|value| {
+        // Map each number in the new target bitfield back to a reference to its value from target.
+        // This is first done by converting our BitVec to a an iterator over all of the indices,
+        // then using the id-to-key map and resolving it back to a reference within target.
+        outliers: target_bitfield
+            .iter_ones()
+            .map(|i| {
                 target
-                    .iter()
-                    .find(|&x| *x == value)
-                    .expect("value not in target")
+                    .get(index_to_value[&i])
+                    .expect("target did not contain an outlier")
             })
             .collect(),
     }
@@ -347,5 +447,35 @@ mod tests {
                 outliers: HashSet::new()
             }
         );
+    }
+
+    // Fuzz test with random data. A lot of it (250 sets, 500_000 users)
+    #[test]
+    #[ignore = "extremely slow to run, only run when needed (45+ seconds!)"]
+    fn fuzz() {
+        let target = (0..=500_000).collect::<HashSet<_>>();
+
+        let map = (0..=250)
+            .into_iter()
+            .map(|role| {
+                (role, {
+                    use rand::{thread_rng, Rng};
+
+                    let mut rng = thread_rng();
+
+                    let mut set = HashSet::new();
+
+                    let st = rng.gen_range(0..=500_000);
+
+                    for i in st..=rng.gen_range(st..=500_000) {
+                        set.insert(i);
+                    }
+
+                    set
+                })
+            })
+            .collect::<HashMap<_, _>>();
+
+        unionize_set(&target, &map);
     }
 }
