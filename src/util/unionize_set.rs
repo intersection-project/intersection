@@ -146,9 +146,7 @@ where
         .into_iter()
         .map(|value| {
             let id = next_id;
-            next_id = next_id
-                .checked_add(1)
-                .expect("too many unique values, overflowed usize::MAX");
+            next_id += 1;
             ((value, id), (id, value))
         })
         .unzip::<_, _, HashMap<_, _>, HashMap<_, _>>();
