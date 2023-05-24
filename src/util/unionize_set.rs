@@ -287,7 +287,7 @@ where
         // Now, we set the target bitfield to itself minus the values in selected_set.1:
         // TODO: Should we avoid cloning here? Excessive benchmark tests don't show this as a bottleneck
         // Cloning here is required for the '!' operator to work
-        target_bitfield = target_bitfield & !selected_set.1.clone();
+        target_bitfield &= !selected_set.1.clone();
         let new_preexisting_set_bitfields = preexisting_set_bitfields
             .iter()
             .map(|(key, bitfield)| (*key, !selected_set.1.clone() & bitfield))
