@@ -18,7 +18,7 @@ lazy_static = "1.4.0"
 logos = "0.13.0"
 poise = "0.5.5"
 rand = "0.8.5"
-regex = "1.8.1"
+regex = "1.8.2"
 tokio = { version = "1.28.1", features = ["macros", "rt-multi-thread"] }
 
 [build-dependencies]
