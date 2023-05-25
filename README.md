@@ -101,5 +101,3 @@ docker run \
     --name intersection \
     10.0.1.114:443/intersection
 ```
-
-**BIG TODO:** WHEN WE GO OPEN SOURCE, add the repo url to Cargo.toml and update /version to link to the current git ref using build_info::PKG_REPOSITORY
