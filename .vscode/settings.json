@@ -8,6 +8,7 @@
         "Insertable",
         "lalrpop",
         "rustc",
+        "rustup",
         "sqlx"
     ]
 }
