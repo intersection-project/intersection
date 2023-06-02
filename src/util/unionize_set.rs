@@ -47,6 +47,7 @@ where
 /// ## Panics
 ///
 /// Panics if the total number of unique Values in preexisting_sets and target is greater than usize::MAX.
+// FIXME: Very slow on debug builds but not on release builds
 pub fn unionize_set<'a, Key, Value>(
     target: &'a HashSet<Value>,
     preexisting_sets: &'a HashMap<Key, HashSet<Value>>,
@@ -458,6 +459,7 @@ mod tests {
 
         // Target set is all numbers 0..=500000
         let target = (0..=500_000).collect::<HashSet<_>>();
+        let mut rng = thread_rng();
 
         let map = (0..=250) // 250 pre-existing sets
             .into_iter()
