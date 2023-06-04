@@ -452,7 +452,7 @@ mod tests {
     // Interestingly enough, this is almost instant on release builds but
     // very very slow on debug builds.
     #[test]
-    #[ignore = "extremely slow to run, only run when needed (45+ seconds!)"]
+    // #[ignore = "extremely slow to run, only run when needed (45+ seconds!)"]
     fn fuzz() {
         use rand::Rng;
         let mut rng = rand::thread_rng();
