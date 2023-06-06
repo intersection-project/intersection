@@ -16,7 +16,7 @@ lalrpop-util = "0.20.0"
 lazy_static = "1.4.0"
 logos = "0.13.0"
 poise = "0.5.5"
-regex = "1.8.3"
+regex = "1.8.4"
 tokio = { version = "1.28.2", features = ["macros", "rt-multi-thread"] }
 
 [build-dependencies]
