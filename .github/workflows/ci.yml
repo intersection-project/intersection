@@ -152,3 +152,5 @@ jobs:
                   context: .
                   push: true
                   tags: ${{ env.LATEST_TAG }}
+                  cache-from: type=gha
+                  cache-to: type=gha,mode=max
