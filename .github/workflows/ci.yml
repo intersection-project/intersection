@@ -124,7 +124,7 @@ jobs:
               with:
                   command: check
 
-    image:
+    build_docker_image:
         runs-on: ubuntu-latest
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         needs: [test, check]
