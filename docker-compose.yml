@@ -1,14 +1,16 @@
 services:
     intersection:
         # Prefer to use our pre-compiled image? Use
-        # image: "thetayloredman/intersection"
+        # image: "index.docker.io/thetayloredman/intersection"
         build: "."
         restart: unless-stopped
         init: true
         env_file: .env
-    watchtower:
-        image: containrrr/watchtower
-        volumes:
-            - /var/run/docker.sock:/var/run/docker.sock
-            - /root/.docker/config.json:/config.json
-        command: --interval 30
+    # If you are using the pre-compiled image and want automatic updates with restarting,
+    # uncomment the below.
+    # watchtower:
+    #     image: containrrr/watchtower
+    #     volumes:
+    #         - /var/run/docker.sock:/var/run/docker.sock
+    #         - /root/.docker/config.json:/config.json
+    #     command: --interval 30
