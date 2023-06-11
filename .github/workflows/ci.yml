@@ -127,6 +127,7 @@ jobs:
     image:
         runs-on: ubuntu-latest
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        needs: [test, check]
 
         steps:
             - name: Checkout
