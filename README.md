@@ -63,41 +63,15 @@ You can now start a development build of Intersection by running `cargo run`.
 
 If you're deploying in a production environment, we suggest you use [Docker](https://www.docker.com/) to manage a container for Intersection. This is how Intersection is deployed to allow for compilation on a separate machine and containerization.
 
-You can build a Docker image for Intersection with the command `docker build -t intersection .`. For starting Intersection, I suggest that you use the following command (a .env file must be present in your CWD!):
+It is suggested to use `docker-compose` to start Intersection. You can easily start the bot in one command:
 
-```bash
-docker run \
-    -d \
-    --restart unless-stopped \
-    --init \
-    --env-file=.env \
-    --name intersection \
-    intersection
+```
+docker compose up
 ```
 
-If you'd like to deploy on a separate server, I suggest you use a custom Docker registry to do this. Our registry will be known as `10.0.0.2:5000` and `10.0.1.114:443` as those are what is used internally.
+If you'd like to use one of our pre-compiled images built from CI, you should follow the comments in
+`docker-compose.yml`. You can also enable Watchtower to automatically restart the container with any
+new image updates. This is exactly how we deploy in production!
 
-Here's _exactly_ how we deploy Intersection in production:
-
-On the build machine, we build a Docker image, tag it, and push it to our local repo:
-
-```bash
-docker build -t intersection .
-docker tag intersection 10.0.0.2:5000/intersection
-docker push 10.0.0.2:5000/intersection
-```
-
-On the host machine, we discard the existing running bot and run a new one based on the image we just built:
-
-```bash
-docker pull 10.0.1.114:443/intersection
-docker stop intersection
-docker rm intersection
-docker run \
-    -d \
-    --restart unless-stopped \
-    --init \
-    --env-file=env \
-    --name intersection \
-    10.0.1.114:443/intersection
-```
+When you push to `main`, `thetayloredman/intersection:latest` is built by the `ci` workflow and pushed
+to Docker Hub. Then, Watchtower sees the changes on the production server and updates the container.
