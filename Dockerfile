@@ -1,9 +1,5 @@
-FROM rust AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
 WORKDIR /app
-RUN cargo install cargo-chef
-
-FROM debian:buster-slim AS runtime
-RUN apt-get update && apt-get upgrade -y
 
 FROM chef AS planner
 COPY . .
@@ -16,7 +12,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN cargo build --release
 
-FROM runtime
+FROM debian:buster-slim
 WORKDIR /app
 COPY --from=builder /app/target/release/intersection /usr/local/bin
 ENTRYPOINT ["/usr/local/bin/intersection"]
