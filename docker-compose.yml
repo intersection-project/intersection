@@ -1,6 +1,14 @@
 services:
     intersection:
-        image: "thetayloredman/intersection"
+        # Prefer to use our pre-compiled image? Use
+        # image: "thetayloredman/intersection"
+        build: "."
         restart: unless-stopped
         init: true
-        env-file: .env
+        env_file: .env
+    watchtower:
+        image: containrrr/watchtower
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+            - /root/.docker/config.json:/config.json
+        command: --interval 30
