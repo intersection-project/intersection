@@ -12,7 +12,7 @@ body:
 
         Thank you for putting your time into reporting a bug in Intersection! In
         order for us to best isolate and resolve your bug, please go through the
-        following ste
+        following steps...
   - type: checkboxes
     id: pre-checks
     attributes:
