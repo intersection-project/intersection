@@ -1,0 +1,6 @@
+services:
+    intersection:
+        image: "thetayloredman/intersection"
+        restart: unless-stopped
+        init: true
+        env-file: .env
