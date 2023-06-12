@@ -448,27 +448,26 @@ mod tests {
     }
 
     // Fuzz test with random data. A lot of it (250 sets, 500_000 users)
+    // Interestingly enough, this is almost instant on release builds but
+    // very very slow on debug builds.
     #[test]
     #[ignore = "extremely slow to run, only run when needed (45+ seconds!)"]
     fn fuzz() {
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
+        // Target set is all numbers 0..=500000
         let target = (0..=500_000).collect::<HashSet<_>>();
 
-        let map = (0..=250)
+        let map = (0..=250) // 250 pre-existing sets
             .into_iter()
             .map(|role| {
                 (role, {
-                    let mut set = HashSet::new();
+                    // Each containing the numbers between these two random points:
+                    let lower_bound = rng.gen_range(0..=500_000);
+                    let higher_bound = rng.gen_range(lower_bound..=500_000);
 
-                    let st = rng.gen_range(0..=500_000);
-
-                    for i in st..=rng.gen_range(st..=500_000) {
-                        set.insert(i);
-                    }
-
-                    set
+                    (lower_bound..=higher_bound).collect::<HashSet<_>>()
                 })
             })
             .collect::<HashMap<_, _>>();
