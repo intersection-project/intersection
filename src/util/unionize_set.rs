@@ -451,16 +451,15 @@ mod tests {
     #[test]
     #[ignore = "extremely slow to run, only run when needed (45+ seconds!)"]
     fn fuzz() {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
         let target = (0..=500_000).collect::<HashSet<_>>();
 
         let map = (0..=250)
             .into_iter()
             .map(|role| {
                 (role, {
-                    use rand::{thread_rng, Rng};
-
-                    let mut rng = thread_rng();
-
                     let mut set = HashSet::new();
 
                     let st = rng.gen_range(0..=500_000);
@@ -474,6 +473,6 @@ mod tests {
             })
             .collect::<HashMap<_, _>>();
 
-        unionize_set(&target, &map);
+        std::hint::black_box(unionize_set(&target, &map));
     }
 }
