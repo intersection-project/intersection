@@ -16,7 +16,7 @@ pub fn wrap_string_vec(input: &Vec<String>, sep: &str, size: usize) -> anyhow::R
             if !current.is_empty() {
                 current.push_str(sep);
             }
-            current.push_str(&next);
+            current.push_str(next);
         }
     }
     if !current.is_empty() {
