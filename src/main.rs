@@ -98,12 +98,12 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
             .send_message(ctx, |m| {
                 m.content(format!(
                     concat!(
-                        "**Hold up!** You're about to mention {} members.{}",
-                        " Are you sure you want to do this?"
+                        "**Hold up!** By running this query, you are about to",
+                        " mention {} people.{} Are you sure?"
                     ),
                     members_to_ping.len(),
                     {
-                        let len = util::wrap_string_vec(stringified_mentions, " ", 2000)
+                        let len = util::wrap_string_vec(&stringified_mentions, " ", 2000)
                             .unwrap() // TODO: Remove unwrap?
                             .len();
                         if len > 2 {
@@ -120,16 +120,14 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
                             .create_button(|button| {
                                 button
                                     .custom_id("large_ping_confirm_no")
-                                    .emoji(serenity::ReactionType::Unicode("x".to_string()))
+                                    .emoji(serenity::ReactionType::Unicode("❌".to_string()))
                                     .label("Cancel")
                                     .style(serenity::ButtonStyle::Secondary)
                             })
                             .create_button(|button| {
                                 button
                                     .custom_id("large_ping_confirm_yes")
-                                    .emoji(serenity::ReactionType::Unicode(
-                                        "heavy_check_mark".to_string(),
-                                    ))
+                                    .emoji(serenity::ReactionType::Unicode("✅".to_string()))
                                     .label("Yes")
                                     .style(serenity::ButtonStyle::Primary)
                             })
@@ -156,7 +154,7 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
             return Ok(());
         } else if interaction.data.custom_id == "large_ping_confirm_yes" {
             m.edit(ctx, |m| {
-                m.content("OK!").components(|components| components)
+                m.content("Confirmed.").components(|components| components)
             })
             .await?;
 
