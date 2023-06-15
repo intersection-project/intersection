@@ -71,10 +71,6 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
     let util::unionize_set::UnionizeSetResult { sets, outliers } =
         util::unionize_set::unionize_set(&members_to_ping, &roles_and_their_members);
 
-    // if members_to_ping.len() > 50 {
-    //     // TODO: Ask the user to confirm they wish to do this action
-    // }
-
     // Now we need to split the output message into individual pings. First, stringify each user mention...
     // TODO: Once message splitting is complete this could result in a user being
     // pinged multiple times if they are present in a role that is split into multiple
@@ -91,6 +87,84 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
         .chain(outliers.into_iter().map(models::mention::Mention::User))
         .map(|x| x.to_string())
         .collect::<Vec<_>>();
+
+    if members_to_ping.len() > 50 {
+        let serenity::Channel::Guild(channel) = msg.channel(ctx).await? else {
+            // DMs would have been prevented already.
+            // Categories can't have messages sent duh
+            bail!("unreachable");
+        };
+        let mut m = channel
+            .send_message(ctx, |m| {
+                m.content(format!(
+                    concat!(
+                        "**Hold up!** You're about to mention {} members.{}",
+                        " Are you sure you want to do this?"
+                    ),
+                    members_to_ping.len(),
+                    {
+                        let len = util::wrap_string_vec(stringified_mentions, " ", 2000)
+                            .unwrap() // TODO: Remove unwrap?
+                            .len();
+                        if len > 2 {
+                            format!(" This will require the sending of {} messages.", len)
+                        } else {
+                            "".to_string()
+                        }
+                    }
+                ))
+                .reference_message(msg) // basically makes it a reply
+                .components(|components| {
+                    components.create_action_row(|action_row| {
+                        action_row
+                            .create_button(|button| {
+                                button
+                                    .custom_id("large_ping_confirm_no")
+                                    .emoji(serenity::ReactionType::Unicode("x".to_string()))
+                                    .label("Cancel")
+                                    .style(serenity::ButtonStyle::Secondary)
+                            })
+                            .create_button(|button| {
+                                button
+                                    .custom_id("large_ping_confirm_yes")
+                                    .emoji(serenity::ReactionType::Unicode(
+                                        "heavy_check_mark".to_string(),
+                                    ))
+                                    .label("Yes")
+                                    .style(serenity::ButtonStyle::Primary)
+                            })
+                    })
+                })
+            })
+            .await?;
+
+        let Some(interaction) = m.await_component_interaction(ctx)
+            .collect_limit(1)
+            .author_id(msg.author.id)
+            .timeout(std::time::Duration::from_secs(30))
+            .await else {
+                m.edit(ctx, |m| m.content("Timed out waiting for confirmation.").components(|components| components)).await?;
+                return Ok(());
+            };
+
+        if interaction.data.custom_id == "large_ping_confirm_no" {
+            m.edit(ctx, |m| {
+                m.content("Cancelled.").components(|components| components)
+            })
+            .await?;
+
+            return Ok(());
+        } else if interaction.data.custom_id == "large_ping_confirm_yes" {
+            m.edit(ctx, |m| {
+                m.content("OK!").components(|components| components)
+            })
+            .await?;
+
+            // let it continue!
+        } else {
+            unreachable!();
+        }
+    }
 
     if stringified_mentions.is_empty() {
         msg.reply(ctx, "No users matched.").await?;
