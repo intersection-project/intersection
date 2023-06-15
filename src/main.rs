@@ -112,7 +112,7 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
         )
         .await?;
     } else {
-        let messages = util::wrap_string_vec(stringified_mentions, " ", 2000)?;
+        let messages = util::wrap_string_vec(&stringified_mentions, " ", 2000)?;
         msg.reply(
             ctx,
             format!(
