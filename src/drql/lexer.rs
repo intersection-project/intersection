@@ -54,11 +54,12 @@ pub enum Tok {
     #[token(")")]
     RightParen,
 
-    /// String literals
+    /// String literals: `"abc def"`, `abc`, `everyone`, `here`, etc
     #[regex(r#""([^"\\]|\\.)*""#, |lex| lex.slice()[1..(lex.slice().len()-1)].to_string())]
     #[regex(r#""([^"\\]|\\.)*"#, |lex| {
         Err(LexicalError::UnterminatedStringLiteral(lex.span().start))
     })]
+    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
     StringLiteral(String),
 
     /// ID literals
@@ -80,10 +81,6 @@ pub enum Tok {
     /// Role mentions
     #[regex(r"<@&[0-9]+>", |lex| lex.slice()[3..(lex.slice().len()-1)].to_string())]
     RoleMention(String),
-
-    /// Raw names
-    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
-    RawName(String),
 }
 
 impl std::fmt::Display for Tok {
@@ -99,7 +96,6 @@ impl std::fmt::Display for Tok {
             Tok::IDLiteral(s) => write!(f, "{}", s),
             Tok::UserMention(s) => write!(f, "<@{}>", s),
             Tok::RoleMention(s) => write!(f, "<@&{}>", s),
-            Tok::RawName(s) => write!(f, "{}", s),
         }
     }
 }
@@ -145,10 +141,10 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Tok::RawName("t".to_string()),
-                Tok::RawName("e".to_string()),
-                Tok::RawName("s".to_string()),
-                Tok::RawName("t".to_string()),
+                Tok::StringLiteral("t".to_string()),
+                Tok::StringLiteral("e".to_string()),
+                Tok::StringLiteral("s".to_string()),
+                Tok::StringLiteral("t".to_string()),
             ]
         );
     }
@@ -160,7 +156,7 @@ mod tests {
         assert_eq!(
             results,
             vec![
-                Ok((0, Tok::RawName("a".to_string()), 1)),
+                Ok((0, Tok::StringLiteral("a".to_string()), 1)),
                 Err(LexicalError::UnknownToken((2, '#'))),
             ]
         );
@@ -173,7 +169,7 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Tok::RawName("abc".to_string()),
+                Tok::StringLiteral("abc".to_string()),
                 Tok::Plus,
                 Tok::StringLiteral("def".to_string()),
                 Tok::Plus,
