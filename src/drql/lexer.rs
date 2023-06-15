@@ -81,7 +81,11 @@ pub enum Tok {
     #[regex(r"<@&[0-9]+>", |lex| lex.slice()[3..(lex.slice().len()-1)].to_string())]
     RoleMention(String),
 
-    /// Raw names
+    // Raw names along with the exact text "@everyone" and "@here" (not "everyone" and "here").
+    // The opening @ is removed
+    // Patch for #25
+    #[token("@everyone", |lex| lex.slice()[1..].to_string())]
+    #[token("@here", |lex| lex.slice()[1..].to_string())]
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
     RawName(String),
 }
@@ -149,6 +153,22 @@ mod tests {
                 Tok::RawName("e".to_string()),
                 Tok::RawName("s".to_string()),
                 Tok::RawName("t".to_string()),
+            ]
+        );
+    }
+
+    // Issue #25
+    #[test]
+    fn lexer_mention_everyone_works_as_expected() {
+        let lexer = DrqlLexer::new("everyone here @everyone @here");
+        let tokens: Vec<_> = lexer.collect();
+        assert_eq!(
+            tokens,
+            vec![
+                Ok((0, Tok::RawName("everyone".to_string()), 8)),
+                Ok((9, Tok::RawName("here".to_string()), 13)),
+                Ok((14, Tok::RawName("everyone".to_string()), 23)),
+                Ok((24, Tok::RawName("here".to_string()), 29))
             ]
         );
     }
