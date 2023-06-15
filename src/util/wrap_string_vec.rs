@@ -2,21 +2,16 @@ use anyhow::bail;
 
 /// Join a vector of strings with a separator, wrapping every time we would overflow the provided
 /// size.
-pub fn wrap_string_vec(
-    mut input: Vec<String>,
-    sep: &str,
-    size: usize,
-) -> anyhow::Result<Vec<String>> {
-    input.reverse();
+pub fn wrap_string_vec(input: &Vec<String>, sep: &str, size: usize) -> anyhow::Result<Vec<String>> {
     let mut result = Vec::new();
     let mut current = String::new();
-    while let Some(next) = input.pop() {
+    for next in input {
         if next.len() > size {
             bail!("Chunk of length {} too large for size {}", next.len(), size);
         }
         if current.len() + next.len() + sep.len() > size {
             result.push(current);
-            current = next;
+            current = next.clone();
         } else {
             if !current.is_empty() {
                 current.push_str(sep);
@@ -37,7 +32,7 @@ mod tests {
     #[test]
     fn wrap_string_vec_works() {
         let result = wrap_string_vec(
-            vec![
+            &vec![
                 "abc".to_string(),
                 "def".to_string(),
                 "ghi".to_string(),
@@ -58,7 +53,7 @@ mod tests {
         );
 
         let result = wrap_string_vec(
-            ('A'..='Z').map(|l| l.to_string()).collect::<Vec<_>>(),
+            &('A'..='Z').map(|l| l.to_string()).collect::<Vec<_>>(),
             " ",
             10,
         )
@@ -79,14 +74,14 @@ mod tests {
     #[test]
     fn wrap_string_vec_has_overflow() {
         assert!(matches!(
-            wrap_string_vec(vec!["ABCDEF".to_string()], " ", 5),
+            wrap_string_vec(&vec!["ABCDEF".to_string()], " ", 5),
             Err(_)
         ));
     }
 
     #[test]
     fn wrap_string_vec_empty_input() {
-        let result = wrap_string_vec(Vec::new(), " ", 10).unwrap();
+        let result = wrap_string_vec(&Vec::new(), " ", 10).unwrap();
         assert_eq!(result, Vec::<String>::new());
     }
 }
