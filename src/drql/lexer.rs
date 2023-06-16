@@ -55,11 +55,15 @@ pub enum Tok {
     RightParen,
 
     /// String literals: `"abc def"`, `abc`, `everyone`, `here`, etc
+    /// From issue #25, `@everyone` and `@here` (the exact strings, which are the mentions)
+    /// are treated as `everyone` and `here`.
     #[regex(r#""([^"\\]|\\.)*""#, |lex| lex.slice()[1..(lex.slice().len()-1)].to_string())]
     #[regex(r#""([^"\\]|\\.)*"#, |lex| {
         Err(LexicalError::UnterminatedStringLiteral(lex.span().start))
     })]
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
+    #[token("@everyone", |lex| lex.slice()[1..].to_string())]
+    #[token("@here", |lex| lex.slice()[1..].to_string())]
     StringLiteral(String),
 
     /// ID literals
@@ -145,6 +149,22 @@ mod tests {
                 Tok::StringLiteral("e".to_string()),
                 Tok::StringLiteral("s".to_string()),
                 Tok::StringLiteral("t".to_string()),
+            ]
+        );
+    }
+
+    // Issue #25
+    #[test]
+    fn lexer_mention_everyone_works_as_expected() {
+        let lexer = DrqlLexer::new("everyone here @everyone @here");
+        let tokens: Vec<_> = lexer.collect();
+        assert_eq!(
+            tokens,
+            vec![
+                Ok((0, Tok::StringLiteral("everyone".to_string()), 8)),
+                Ok((9, Tok::StringLiteral("here".to_string()), 13)),
+                Ok((14, Tok::StringLiteral("everyone".to_string()), 23)),
+                Ok((24, Tok::StringLiteral("here".to_string()), 29))
             ]
         );
     }
