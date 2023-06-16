@@ -1,0 +1,66 @@
+name: Feature request
+description: Got a feature you'd like added to Intersection? Tell us here!
+title: 'feat: '
+labels:
+  - enhancement
+  - untriaged
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        # Hey there! Read me first!
+
+        Thank you for putting your time into helping enhance Intersection! In
+        order for us to best go through with your request, please go through the
+        following steps...
+  - type: checkboxes
+    id: pre-checks
+    attributes:
+      label: Before we begin...
+      description: Please confirm you've done the following.
+      options:
+        - label: I've checked the issue checker and ensured this is not a duplicate
+          required: true
+  - type: textarea
+    id: describe-feat
+    attributes:
+      label: Describe the feature you are requesting.
+      description: >-
+        In a few concise sentences, please describe the feature you'd like
+        added.
+    validations:
+      required: true
+  - type: textarea
+    id: benefit
+    attributes:
+      label: How will this benefit Intersection?
+      description: Provide a small list of reasons this is beneficial to the Project.
+    validations:
+      required: true
+  - type: textarea
+    id: negatives
+    attributes:
+      label: Is there any reasons not to implement this feature?
+      description: List the cons.
+    validations:
+      required: true
+  - type: input
+    id: search-terms
+    attributes:
+      label: Search Terms
+      description: >-
+        Please provide a few brief keywords that can be used to aid people
+        searching for your issue
+      placeholder: this-command that-button error-404
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Optionally, add any other useful context here.
+  - type: markdown
+    attributes:
+      value: >-
+        # Thank you!
+
+        We appreciate your time and effort you have put into making this feature
+        request. Please double-check everything and submit it!

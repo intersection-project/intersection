@@ -6,19 +6,18 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-actix-rt = "2.8.0"
 anyhow = "1.0.71"
 async-recursion = "1.0.4"
 bitvec = "1.0.1"
-chrono = "0.4.24"
+chrono = "0.4.26"
 dotenvy = "0.15.7"
 json = "0.12.4"
 lalrpop-util = "0.20.0"
 lazy_static = "1.4.0"
 logos = "0.13.0"
 poise = "0.5.5"
-regex = "1.8.2"
-tokio = { version = "1.28.1", features = ["macros", "rt-multi-thread"] }
+regex = "1.8.4"
+tokio = { version = "1.28.2", features = ["macros", "rt-multi-thread"] }
 
 [dev-dependencies]
 rand = "0.8.5"

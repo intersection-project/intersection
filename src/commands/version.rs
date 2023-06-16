@@ -24,6 +24,15 @@ fn crate_version(display_name: &str, crate_name: &str) -> String {
 /// See what version of Intersection and our dependencies we're running
 #[poise::command(slash_command)]
 pub async fn version(ctx: Context<'_>) -> Result<(), anyhow::Error> {
+    let dirty_str = if build_info::GIT_DIRTY.unwrap_or(false) {
+        ", dirty source tree"
+    } else {
+        ""
+    };
+    let git_str = build_info::GIT_VERSION
+        .map(|tag| format!(" (git {tag}{dirty_str})"))
+        .unwrap_or("".to_string());
+
     ctx.say(format!(
         concat!(
             "Intersection v{version}{git_str}, compiled by {rustc_version} for {target} ({profile} build) on <t:{epoch}:F> (<t:{epoch}:R>)\n",
@@ -35,20 +44,10 @@ pub async fn version(ctx: Context<'_>) -> Result<(), anyhow::Error> {
             "{serenity_version}\n",
         ),
         version = build_info::PKG_VERSION,
-        git_str = match build_info::GIT_VERSION {
-            None => "".to_string(),
-            Some(tag) => format!(
-                " (git {tag}{dirty_str})",
-                dirty_str = match build_info::GIT_DIRTY {
-                    None => "",
-                    Some(false) => "",
-                    Some(true) => ", dirty source tree"
-                }
-            )
-        },
         rustc_version = build_info::RUSTC_VERSION,
         target = build_info::TARGET,
         profile = build_info::PROFILE,
+        git_str = git_str,
 
         lalrpop_version = crate_version("LALRPOP", "lalrpop"),
         logos_version = crate_version("Logos", "logos"),

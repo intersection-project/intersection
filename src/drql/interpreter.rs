@@ -103,7 +103,7 @@ mod tests {
             }
         }
 
-        #[actix_rt::test]
+        #[tokio::test]
         async fn union_ok_case() {
             assert_eq!(
                 interpret(
@@ -125,7 +125,7 @@ mod tests {
             );
         }
 
-        #[actix_rt::test]
+        #[tokio::test]
         #[should_panic = "called `Result::unwrap()` on an `Err` value: error case 1"]
         async fn errors_bubble() {
             let _ = interpret(
