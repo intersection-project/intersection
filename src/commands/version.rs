@@ -34,7 +34,7 @@ pub async fn version(ctx: Context<'_>) -> Result<(), anyhow::Error> {
         .map(|(short, long)| {
             format!(
                 " (git {commit_hash_or_link}{dirty_str})",
-                commit_hash_or_link = if build_info::PKG_REPOSITORY == "" {
+                commit_hash_or_link = if build_info::PKG_REPOSITORY.is_empty() {
                     format!("`{short}`")
                 } else {
                     format!(
