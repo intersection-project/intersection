@@ -35,10 +35,10 @@ pub async fn version(ctx: Context<'_>) -> Result<(), anyhow::Error> {
             format!(
                 " (git {commit_hash_or_link}{dirty_str})",
                 commit_hash_or_link = if build_info::PKG_REPOSITORY == "" {
-                    short.to_string()
+                    format!("`{short}`")
                 } else {
                     format!(
-                        "[{short}]({repo}/tree/{long})",
+                        "[`{short}`]({repo}/tree/{long})",
                         repo = build_info::PKG_REPOSITORY
                     )
                 }
@@ -46,9 +46,13 @@ pub async fn version(ctx: Context<'_>) -> Result<(), anyhow::Error> {
         })
         .unwrap_or("".to_string());
 
+    let ci_str = build_info::CI_PLATFORM
+        .map(|platform| format!(" via {}", platform))
+        .unwrap_or("".to_string());
+
     ctx.say(format!(
         concat!(
-            "Intersection v{version}{git_str}, compiled by {rustc_version} for {target} ({profile} build) on <t:{epoch}:F> (<t:{epoch}:R>)\n",
+            "Intersection v{version}{git_str}, compiled by {rustc_version} for {target} ({profile} build){ci_str} on <t:{epoch}:F> (<t:{epoch}:R>)\n",
             "\n",
             "Powered by:\n",
             "{lalrpop_version}\n",
@@ -61,6 +65,7 @@ pub async fn version(ctx: Context<'_>) -> Result<(), anyhow::Error> {
         target = build_info::TARGET,
         profile = build_info::PROFILE,
         git_str = git_str,
+        ci_str = ci_str,
 
         lalrpop_version = crate_version("LALRPOP", "lalrpop"),
         logos_version = crate_version("Logos", "logos"),
