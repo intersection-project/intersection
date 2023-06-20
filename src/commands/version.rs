@@ -29,8 +29,21 @@ pub async fn version(ctx: Context<'_>) -> Result<(), anyhow::Error> {
     } else {
         ""
     };
-    let git_str = build_info::GIT_VERSION
-        .map(|tag| format!(" (git {tag}{dirty_str})"))
+    let git_str = build_info::GIT_COMMIT_HASH_SHORT
+        .zip(build_info::GIT_COMMIT_HASH)
+        .map(|(short, long)| {
+            format!(
+                " (git {commit_hash_or_link}{dirty_str})",
+                commit_hash_or_link = if build_info::PKG_REPOSITORY == "" {
+                    short.to_string()
+                } else {
+                    format!(
+                        "[{short}]({repo}/tree/{long})",
+                        repo = build_info::PKG_REPOSITORY
+                    )
+                }
+            )
+        })
         .unwrap_or("".to_string());
 
     ctx.say(format!(
