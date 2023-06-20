@@ -1,7 +1,7 @@
 [package]
 name = "intersection"
 # Exposed publicly in /version and /about how_it_works. Might cause broken markdown output if left blank.
-repository = "https://github.com/thetayloredman/intersection/"
+repository = "https://github.com/intersection-project/intersection/"
 version = "1.0.0"
 edition = "2021"
 
