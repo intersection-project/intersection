@@ -452,14 +452,13 @@ mod tests {
     // Interestingly enough, this is almost instant on release builds but
     // very very slow on debug builds.
     #[test]
-    // #[ignore = "extremely slow to run, only run when needed (45+ seconds!)"]
+    #[ignore = "extremely slow to run, only run when needed (45+ seconds!)"]
     fn fuzz() {
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
         // Target set is all numbers 0..=500000
         let target = (0..=500_000).collect::<HashSet<_>>();
-        let mut rng = thread_rng();
 
         let map = (0..=250) // 250 pre-existing sets
             .into_iter()
