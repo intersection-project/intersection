@@ -10,13 +10,6 @@ fn main() {
         .join("built.rs"),
     )
     .expect("Failed to acquire build-time information");
-    panic!(
-        "{}",
-        std::fs::read_to_string(
-            std::path::Path::new(&std::env::var("OUT_DIR").unwrap()).join("built.rs")
-        )
-        .unwrap()
-    );
     lalrpop::process_root().unwrap();
     println!("cargo:rerun-if-changed=src/grammar.lalrpop");
     println!("cargo:rerun-if-changed=.git"); // because of git sha in build data
