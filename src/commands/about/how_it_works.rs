@@ -11,7 +11,8 @@ pub async fn how_it_works(ctx: Context<'_>) -> Result<(), anyhow::Error> {
         include_str!("./how_it_works.md"),
         cmd_version = util::mention_application_command(serenity_ctx, "version").await?,
         cmd_debug_parse_one =
-            util::mention_application_command(serenity_ctx, "debug parse_one").await?
+            util::mention_application_command(serenity_ctx, "debug parse_one").await?,
+        repo_url = super::super::super::build_info::PKG_REPOSITORY,
     ))
     .await?;
     Ok(())

@@ -21,4 +21,4 @@ Then one of the most complicated steps of Intersection occurs: optimization. Dis
 
 ## Contributing
 
-Intersection is currently closed-source software. I plan to go open-source very soon, stay tuned! If you're still interested, please reach out so we can see how your skills can benefit the Project!
+All of Intersection is completely open-source! You can [open our repository on GitHub]({repo_url}) to take a look at how you can help!
