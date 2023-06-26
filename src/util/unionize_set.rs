@@ -2,7 +2,7 @@ use bitvec::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
-/// Results from [unionize_set].
+/// Results from [`unionize_set`].
 #[derive(Debug, PartialEq)]
 pub struct UnionizeSetResult<'a, Key, Value>
 where
@@ -23,7 +23,7 @@ where
 /// "pre-existing" list and one "outliers" set such that when the union of all of the returned pre-existing
 /// sets and the outliers are taken, it exactly equals the target set.
 ///
-/// This function takes a HashMap of keys to pre-existing sets and returns keys from that HashMap.
+/// This function takes a [`HashMap`] of keys to pre-existing sets and returns keys from that `HashMap`.
 ///
 /// You may be confused as to how this function is used within Intersection: It's quite simple, actually.
 /// Given a list of Discord users to @-mention (the target set) and every role within the server (the
@@ -46,7 +46,7 @@ where
 ///
 /// ## Panics
 ///
-/// Panics if the total number of unique Values in preexisting_sets and target is greater than usize::MAX.
+/// Panics if the total number of unique Values in `preexisting_sets` and target is greater than `usize::MAX`.
 // FIXME: Very slow on debug builds but not on release builds
 pub fn unionize_set<'a, Key, Value>(
     target: &'a HashSet<Value>,

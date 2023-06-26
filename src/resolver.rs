@@ -4,7 +4,7 @@ use anyhow::{bail, Context as _};
 use poise::{async_trait, serenity_prelude as serenity};
 use std::collections::HashSet;
 
-/// The custom instance of the DRQL [InterpreterResolver] used for Intersection.
+/// The custom instance of the DRQL [`InterpreterResolver`] used for Intersection.
 pub struct Resolver<'a> {
     pub guild: &'a serenity::Guild,
     pub member: &'a serenity::Member,

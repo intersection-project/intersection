@@ -3,7 +3,7 @@ use super::super::Context;
 use anyhow::Context as _;
 use chrono::DateTime;
 
-/// Returns [Display Name](crate url) vCRATE_VERSION
+/// Returns `[Display Name](crate url) vCRATE_VERSION`
 fn crate_version(display_name: &str, crate_name: &str) -> String {
     let version = build_info::DEPENDENCIES
         .iter()
