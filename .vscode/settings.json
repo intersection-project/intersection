@@ -13,5 +13,6 @@
         "rustc",
         "rustup",
         "sqlx"
-    ]
+    ],
+    "rust-analyzer.checkOnSave.command": "clippy"
 }

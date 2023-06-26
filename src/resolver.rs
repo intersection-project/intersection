@@ -178,7 +178,7 @@ impl<'a> InterpreterResolver<anyhow::Error> for Resolver<'a> {
                 .guild
                 .roles
                 .get(&id)
-                .context(format!("Unable to resolve role with ID {}", id))?
+                .context(format!("Unable to resolve role with ID {id}"))?
                 .members(self.guild))
         }
     }

@@ -24,7 +24,7 @@ pub async fn scan(
             chunks.len(),
             chunks
                 .iter()
-                .map(|x| format!("`{}`", x))
+                .map(|x| format!("`{x}`"))
                 .collect::<Vec<_>>()
                 .join("\n")
         ))
@@ -41,8 +41,8 @@ pub async fn parse_one(
     #[description = "The DRQL query to parse (DO NOT include @{})"] query: String,
 ) -> Result<(), anyhow::Error> {
     ctx.say(match drql::parser::parse_drql(query.as_str()) {
-        Err(e) => format!("Encountered an error while parsing:\n\n```{:?}```", e),
-        Ok(ast) => format!("Successfully parsed:\n\n```{:?}```", ast),
+        Err(e) => format!("Encountered an error while parsing:\n\n```{e:?}```"),
+        Ok(ast) => format!("Successfully parsed:\n\n```{ast:?}```"),
     })
     .await?;
 
@@ -64,7 +64,7 @@ pub async fn reduce(
             .reduce(|acc, chunk| crate::drql::ast::Expr::Union(Box::new(acc), Box::new(chunk)))
         {
             None => "No chunks found.".to_string(),
-            Some(ast) => format!("Success! Resulting AST:\n\n```{:?}```", ast),
+            Some(ast) => format!("Success! Resulting AST:\n\n```{ast:?}```"),
         },
     )
     .await?;

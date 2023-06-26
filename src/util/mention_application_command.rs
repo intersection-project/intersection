@@ -26,8 +26,8 @@ pub async fn mention_application_command(
     match command {
         Some(command) => Ok(format!("</{}:{}>", command_string, command.id.0)),
         None => {
-            println!("WARN: Attempt to mention the command \"{}\" (root command {}) which was not found!", command_string, command_name);
-            Ok(format!("`/{}`", command_string))
+            println!("WARN: Attempt to mention the command \"{command_string}\" (root command {command_name}) which was not found!");
+            Ok(format!("`/{command_string}`"))
         }
     }
 }

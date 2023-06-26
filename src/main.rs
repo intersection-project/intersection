@@ -121,7 +121,7 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
                             .unwrap() // TODO: Remove unwrap?
                             .len();
                         if len > 2 {
-                            format!(" This will require the sending of {} messages.", len)
+                            format!(" This will require the sending of {len} messages.")
                         } else {
                             "".to_string()
                         }
@@ -240,9 +240,9 @@ impl serenity::EventHandler for Handler {
                 .context("Error handling DRQL query")
             {
                 Ok(_) => {}
-                Err(e) => {
-                    if let Err(e) = msg.reply(ctx, format!("{:#}", e)).await {
-                        panic!("Error sending error message: {:#}", e);
+                Err(query_err) => {
+                    if let Err(message_send_err) = msg.reply(ctx, format!("{query_err:#}")).await {
+                        panic!("Error sending error message: {message_send_err:#}");
                     }
                 }
             }

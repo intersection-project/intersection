@@ -27,7 +27,7 @@ impl std::fmt::Display for LexicalError {
             LexicalError::UnterminatedStringLiteral(index) => {
                 write!(f, "Unterminated string literal at index {index}")
             }
-            LexicalError::ParseIntError(e) => write!(f, "ParseIntError: {}", e),
+            LexicalError::ParseIntError(e) => write!(f, "ParseIntError: {e}"),
         }
     }
 }
@@ -96,10 +96,10 @@ impl std::fmt::Display for Tok {
             Tok::Ampersand => write!(f, "&"),
             Tok::LeftParen => write!(f, "("),
             Tok::RightParen => write!(f, ")"),
-            Tok::StringLiteral(s) => write!(f, "\"{}\"", s),
-            Tok::IDLiteral(s) => write!(f, "{}", s),
-            Tok::UserMention(s) => write!(f, "<@{}>", s),
-            Tok::RoleMention(s) => write!(f, "<@&{}>", s),
+            Tok::StringLiteral(s) => write!(f, "\"{s}\""),
+            Tok::IDLiteral(s) => write!(f, "{s}"),
+            Tok::UserMention(s) => write!(f, "<@{s}>"),
+            Tok::RoleMention(s) => write!(f, "<@&{s}>"),
         }
     }
 }
