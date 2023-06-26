@@ -2,6 +2,10 @@
 name = "intersection"
 # Exposed publicly in /version and /about how_it_works. Might cause broken markdown output if left blank.
 repository = "https://github.com/intersection-project/intersection/"
+description = "Discord mentions, supercharged."
+license = "AGPL-3.0"
+keywords = ["discord", "discord-bot", "discord-mentions", "set-theory"]
+categories = ["parser-implementations"]
 version = "1.0.0"
 edition = "2021"
 

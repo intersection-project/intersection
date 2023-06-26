@@ -1,3 +1,8 @@
+#![warn(clippy::cargo)]
+#![allow(clippy::multiple_crate_versions)]
+#![warn(clippy::nursery)]
+#![warn(clippy::pedantic)]
+
 mod commands;
 mod drql;
 mod extensions;
@@ -11,6 +16,8 @@ extern crate lalrpop_util;
 lalrpop_mod!(
     /// Direct access to the DRQL LALRPOP parser. Prefer to use the functions exported by drql::parser instead.
     #[allow(clippy::all)]
+    #[allow(clippy::nursery)]
+    #[allow(clippy::pedantic)]
     parser
 );
 
