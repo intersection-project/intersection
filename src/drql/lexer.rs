@@ -1,14 +1,24 @@
+//! Lexer for the DRQL language
+
 use logos::{Lexer, Logos};
 use std::num::ParseIntError;
 
+/// Any value attached to a span within source text.
 pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
 
+/// An error when lexing or parsing a query
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum LexicalError {
+    /// The generic error
+    ///
+    /// Most errors will be narrowed to something else, but this represents any default lexer error.
     #[default]
     NoMatchingRule,
+    /// A token that the lexer doesn't recognize
     UnknownToken((usize, char)),
+    /// An unterminated string literal
     UnterminatedStringLiteral(usize),
+    /// An error while parsing an integer
     ParseIntError(ParseIntError),
 }
 impl From<ParseIntError> for LexicalError {
@@ -31,6 +41,7 @@ impl std::fmt::Display for LexicalError {
     }
 }
 
+/// The list of possible tokens in DRQL
 #[derive(Logos, Debug, Clone, PartialEq, Eq)]
 #[logos(error = LexicalError, skip r"[ \t\r\n\f]+")]
 pub enum Tok {
@@ -103,12 +114,15 @@ impl std::fmt::Display for Tok {
     }
 }
 
+/// A lexer for the Discord Role Query Language
 #[allow(clippy::module_name_repetitions)]
 pub struct DrqlLexer<'input> {
+    /// The internal [`Lexer`] we are feeding from
     lex: Lexer<'input, Tok>,
 }
 
 impl<'input> DrqlLexer<'input> {
+    /// Create a new [`DrqlLexer`] from a given input [`str`].
     pub fn new(input: &'input str) -> Self {
         Self {
             lex: Tok::lexer(input),

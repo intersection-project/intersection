@@ -1,3 +1,6 @@
+//! Utilities and functions for interpreting DRQL queries
+
+use super::ast::Expr;
 use async_recursion::async_recursion;
 use poise::{
     async_trait,
@@ -5,15 +8,17 @@ use poise::{
 };
 use std::collections::HashSet;
 
-use super::ast::Expr;
-
 /// Describes a set of functions used to resolve values in [interpret].
 #[allow(clippy::module_name_repetitions)]
 #[async_trait]
 pub trait InterpreterResolver<E> {
+    /// Resolve a role name to the HashSet of its members
     async fn resolve_string_literal(&mut self, literal: String) -> Result<HashSet<UserId>, E>;
+    /// Resolve an ID to the HashSet of its members
     async fn resolve_unknown_id(&mut self, id: String) -> Result<HashSet<UserId>, E>;
+    /// Resolve a user ID to the HashSet of just its ID
     async fn resolve_user_id(&mut self, id: UserId) -> Result<HashSet<UserId>, E>;
+    /// Resolve a role ID to the HashSet of its members
     async fn resolve_role_id(&mut self, id: RoleId) -> Result<HashSet<UserId>, E>;
 }
 

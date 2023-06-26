@@ -1,11 +1,15 @@
-use anyhow::Context as _;
-use std::collections::{HashMap, HashSet};
-
-use poise::serenity_prelude as serenity;
+//! Custom extension traits for Intersection
+//!
+//! This module provides some custom traits on Serenity types.
 
 use crate::models;
+use anyhow::Context as _;
+use poise::serenity_prelude as serenity;
+use std::collections::{HashMap, HashSet};
 
+/// Custom trait implemented on all [`serenity::Member`]s
 pub trait CustomMemberImpl {
+    /// Determine if this member can mention the given role
     fn can_mention_role(
         &self,
         ctx: &serenity::Context,
@@ -24,9 +28,13 @@ impl CustomMemberImpl for serenity::Member {
     }
 }
 
+/// Custom trait implemented on all [`serenity::Guild`]s
 pub trait CustomGuildImpl {
+    /// Obtain a [`HashSet`] of every member in this guild's user ID
     fn get_everyone(&self) -> HashSet<serenity::UserId>;
+    /// Obtain a [`HashSet`] of every online member in this guild's user ID
     fn get_here(&self) -> HashSet<serenity::UserId>;
+    /// Obtain a [`HashMap`] mapping every role in this guild to its members
     fn all_roles_and_members(
         &self,
         ctx: &serenity::Context,
@@ -73,7 +81,9 @@ impl CustomGuildImpl for serenity::Guild {
     }
 }
 
+/// Custom trait implemented on all [`serenity::Role`]s
 pub trait CustomRoleImpl {
+    /// Determine the members of this role
     fn members(&self, guild: &serenity::Guild) -> HashSet<serenity::UserId>;
 }
 impl CustomRoleImpl for serenity::Role {

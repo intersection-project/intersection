@@ -1,3 +1,5 @@
+//! The instance of the DRQL interpreter resolver used for Intersection
+
 use crate::drql::interpreter::InterpreterResolver;
 use crate::extensions::{CustomGuildImpl, CustomMemberImpl, CustomRoleImpl};
 use anyhow::{bail, Context as _};
@@ -6,8 +8,11 @@ use std::collections::HashSet;
 
 /// The custom instance of the DRQL [`InterpreterResolver`] used for Intersection.
 pub struct Resolver<'a> {
+    /// The guild that the query was originally sent in
     pub guild: &'a serenity::Guild,
+    /// The member who originally sent the query
     pub member: &'a serenity::Member,
+    /// The Context made available to the command
     pub ctx: &'a serenity::Context,
 }
 #[async_trait]

@@ -1,3 +1,5 @@
+//! Wrapper for the DRQL parser
+
 use super::ast;
 use super::lexer;
 use crate::parser;

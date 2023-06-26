@@ -5,6 +5,7 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::unused_async)] // command functions must be async
 #![warn(missing_docs)]
+#![warn(clippy::missing_docs_in_private_items)]
 
 mod commands;
 mod drql;
@@ -21,6 +22,8 @@ lalrpop_mod!(
     #[allow(clippy::all)]
     #[allow(clippy::nursery)]
     #[allow(clippy::pedantic)]
+    #[allow(missing_docs)]
+    #[allow(clippy::missing_docs_in_private_items)]
     parser
 );
 
@@ -36,12 +39,15 @@ pub mod build_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
+/// Global data passed around throughout the bot via the Context instance
 pub struct Data {
     /// The framework.shard_manager, used to get the latency of the current shard in the ping command
     shard_manager: Arc<serenity::Mutex<serenity::ShardManager>>,
 }
+/// Type alias for the poise Context given our `Data` type
 type Context<'a> = poise::Context<'a, Data, anyhow::Error>;
 
+/// Handle a DRQL query from a message, sending the response message(s) to the channel.
 async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> anyhow::Result<()> {
     if msg.guild(ctx).is_none() {
         bail!("DRQL queries are not available in DMs.");
@@ -226,6 +232,7 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
     Ok(())
 }
 
+/// Event handler for Intersection
 struct Handler;
 #[serenity::async_trait]
 impl serenity::EventHandler for Handler {

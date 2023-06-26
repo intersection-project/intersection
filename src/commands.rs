@@ -1,3 +1,7 @@
+//! The module containing all of Intersection's commands
+
+#![allow(clippy::missing_docs_in_private_items)] // because we don't expect all of these small modules to have docs
+
 mod about;
 mod debug;
 mod ping;
