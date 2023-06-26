@@ -12,8 +12,8 @@ pub enum Mention {
 impl std::fmt::Display for Mention {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Mention::User(id) => write!(f, "<@{id}>"),
-            Mention::Role(mention) => write!(f, "{mention}"),
+            Self::User(id) => write!(f, "<@{id}>"),
+            Self::Role(mention) => write!(f, "{mention}"),
         }
     }
 }
@@ -32,9 +32,9 @@ pub enum RoleType {
 impl std::fmt::Display for RoleType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RoleType::Everyone => write!(f, "@everyone"),
-            RoleType::Here => write!(f, "@here"),
-            RoleType::Role(id) => write!(f, "<@&{id}>"),
+            Self::Everyone => write!(f, "@everyone"),
+            Self::Here => write!(f, "@here"),
+            Self::Role(id) => write!(f, "<@&{id}>"),
         }
     }
 }

@@ -3,7 +3,7 @@ use std::num::ParseIntError;
 
 pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum LexicalError {
     #[default]
     NoMatchingRule,
@@ -13,25 +13,25 @@ pub enum LexicalError {
 }
 impl From<ParseIntError> for LexicalError {
     fn from(value: ParseIntError) -> Self {
-        LexicalError::ParseIntError(value)
+        Self::ParseIntError(value)
     }
 }
 impl std::fmt::Display for LexicalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LexicalError::NoMatchingRule => write!(f, "No matching rule."),
-            LexicalError::UnknownToken((index, ch)) => {
+            Self::NoMatchingRule => write!(f, "No matching rule."),
+            Self::UnknownToken((index, ch)) => {
                 write!(f, "Unknown token at index {index}: `{ch}`")
             }
-            LexicalError::UnterminatedStringLiteral(index) => {
+            Self::UnterminatedStringLiteral(index) => {
                 write!(f, "Unterminated string literal at index {index}")
             }
-            LexicalError::ParseIntError(e) => write!(f, "ParseIntError: {e}"),
+            Self::ParseIntError(e) => write!(f, "ParseIntError: {e}"),
         }
     }
 }
 
-#[derive(Logos, Debug, Clone, PartialEq)]
+#[derive(Logos, Debug, Clone, PartialEq, Eq)]
 #[logos(error = LexicalError, skip r"[ \t\r\n\f]+")]
 pub enum Tok {
     /// The token `+`
@@ -89,16 +89,16 @@ pub enum Tok {
 impl std::fmt::Display for Tok {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Tok::Plus => write!(f, "+"),
-            Tok::Minus => write!(f, "-"),
-            Tok::Pipe => write!(f, "|"),
-            Tok::Ampersand => write!(f, "&"),
-            Tok::LeftParen => write!(f, "("),
-            Tok::RightParen => write!(f, ")"),
-            Tok::StringLiteral(s) => write!(f, "\"{s}\""),
-            Tok::IDLiteral(s) => write!(f, "{s}"),
-            Tok::UserMention(s) => write!(f, "<@{s}>"),
-            Tok::RoleMention(s) => write!(f, "<@&{s}>"),
+            Self::Plus => write!(f, "+"),
+            Self::Minus => write!(f, "-"),
+            Self::Pipe => write!(f, "|"),
+            Self::Ampersand => write!(f, "&"),
+            Self::LeftParen => write!(f, "("),
+            Self::RightParen => write!(f, ")"),
+            Self::StringLiteral(s) => write!(f, "\"{s}\""),
+            Self::IDLiteral(s) => write!(f, "{s}"),
+            Self::UserMention(s) => write!(f, "<@{s}>"),
+            Self::RoleMention(s) => write!(f, "<@&{s}>"),
         }
     }
 }

@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
 /// Results from [`unionize_set`].
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 #[allow(clippy::module_name_repetitions)]
 pub struct UnionizeSetResult<'a, Key, Value>
 where

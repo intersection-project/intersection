@@ -43,11 +43,9 @@ impl CustomGuildImpl for serenity::Guild {
         self.get_everyone()
             .into_iter()
             .filter(|id| {
-                if let Some(presence) = self.presences.get(id) {
+                self.presences.get(id).map_or(false, |presence| {
                     presence.status != serenity::OnlineStatus::Offline
-                } else {
-                    false
-                }
+                })
             })
             .collect::<HashSet<_>>()
     }
