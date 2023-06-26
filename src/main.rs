@@ -4,6 +4,7 @@
 #![warn(clippy::nursery)]
 #![warn(clippy::pedantic)]
 #![allow(clippy::unused_async)] // command functions must be async
+#![warn(missing_docs)]
 
 mod commands;
 mod drql;
