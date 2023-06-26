@@ -13,8 +13,7 @@ pub async fn mention_application_command(
 ) -> Result<String, anyhow::Error> {
     let command_name = command_string
         .split_once(' ')
-        .map(|(name, _)| name)
-        .unwrap_or(command_string);
+        .map_or(command_string, |(name, _)| name);
 
     let command =
         serenity::model::application::command::Command::get_global_application_commands(ctx)
@@ -23,11 +22,10 @@ pub async fn mention_application_command(
             .into_iter()
             .find(|command| command.name == command_name);
 
-    match command {
-        Some(command) => Ok(format!("</{}:{}>", command_string, command.id.0)),
-        None => {
-            println!("WARN: Attempt to mention the command \"{command_string}\" (root command {command_name}) which was not found!");
-            Ok(format!("`/{command_string}`"))
-        }
+    if let Some(command) = command {
+        Ok(format!("</{}:{}>", command_string, command.id.0))
+    } else {
+        println!("WARN: Attempt to mention the command \"{command_string}\" (root command {command_name}) which was not found!");
+        Ok(format!("`/{command_string}`"))
     }
 }

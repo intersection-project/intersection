@@ -1,6 +1,5 @@
-use std::num::ParseIntError;
-
 use logos::{Lexer, Logos};
+use std::num::ParseIntError;
 
 pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
 
@@ -104,6 +103,7 @@ impl std::fmt::Display for Tok {
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub struct DrqlLexer<'input> {
     lex: Lexer<'input, Tok>,
 }

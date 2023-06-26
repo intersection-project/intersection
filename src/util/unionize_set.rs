@@ -4,6 +4,7 @@ use std::hash::Hash;
 
 /// Results from [`unionize_set`].
 #[derive(Debug, PartialEq)]
+#[allow(clippy::module_name_repetitions)]
 pub struct UnionizeSetResult<'a, Key, Value>
 where
     Key: PartialEq + Eq + Hash,
@@ -461,7 +462,6 @@ mod tests {
         let target = (0..=500_000).collect::<HashSet<_>>();
 
         let map = (0..=250) // 250 pre-existing sets
-            .into_iter()
             .map(|role| {
                 (role, {
                     // Each containing the numbers between these two random points:

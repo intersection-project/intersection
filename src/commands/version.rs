@@ -13,7 +13,7 @@ fn crate_version(display_name: &str, crate_name: &str) -> String {
     format!(
         "[{display_name}](https://crates.io/crates/{crate_name}{crate_version_suffix}) {crate_version_string}",
         crate_version_suffix = match &version {
-            None => "".to_string(),
+            None => String::new(),
             Some(version) => format!("/{}", &version[1..]),
         },
         crate_version_string = version
@@ -31,7 +31,7 @@ pub async fn version(ctx: Context<'_>) -> Result<(), anyhow::Error> {
     };
     let git_str = build_info::GIT_COMMIT_HASH_SHORT
         .zip(build_info::GIT_COMMIT_HASH)
-        .map(|(short, long)| {
+        .map_or(String::new(), |(short, long)| {
             format!(
                 " (git {commit_hash_or_link}{dirty_str})",
                 commit_hash_or_link = if build_info::PKG_REPOSITORY.is_empty() {
@@ -43,8 +43,7 @@ pub async fn version(ctx: Context<'_>) -> Result<(), anyhow::Error> {
                     )
                 }
             )
-        })
-        .unwrap_or("".to_string());
+        });
 
     ctx.say(format!(
         concat!(

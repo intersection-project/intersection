@@ -8,6 +8,7 @@ use std::collections::HashSet;
 use super::ast::Expr;
 
 /// Describes a set of functions used to resolve values in [interpret].
+#[allow(clippy::module_name_repetitions)]
 #[async_trait]
 pub trait InterpreterResolver<E> {
     async fn resolve_string_literal(&mut self, literal: String) -> Result<HashSet<UserId>, E>;

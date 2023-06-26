@@ -123,7 +123,7 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
                         if len > 2 {
                             format!(" This will require the sending of {len} messages.")
                         } else {
-                            "".to_string()
+                            String::new()
                         }
                     }
                 ))

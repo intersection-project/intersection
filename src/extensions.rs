@@ -80,12 +80,11 @@ pub trait CustomRoleImpl {
 }
 impl CustomRoleImpl for serenity::Role {
     fn members(&self, guild: &serenity::Guild) -> HashSet<serenity::UserId> {
-        HashSet::from_iter(
-            guild
-                .members
-                .values()
-                .filter(|member| member.roles.contains(&self.id))
-                .map(|member| member.user.id),
-        )
+        guild
+            .members
+            .values()
+            .filter(|member| member.roles.contains(&self.id))
+            .map(|member| member.user.id)
+            .collect::<HashSet<_>>()
     }
 }

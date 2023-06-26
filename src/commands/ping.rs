@@ -28,9 +28,7 @@ pub async fn ping(ctx: Context<'_>) -> Result<(), anyhow::Error> {
         r.content(format!(
             "Pong :ping_pong:! (Round trip: {}ms. Heartbeat: {}.)",
             diff_ms,
-            shard_latency
-                .map(|l| format!("{}ms", l.as_millis()))
-                .unwrap_or_else(|| "unknown".to_string())
+            shard_latency.map_or_else(|| "unknown".to_string(), |l| format!("{}ms", l.as_millis()))
         ))
     })
     .await?;

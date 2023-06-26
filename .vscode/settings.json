@@ -1,9 +1,6 @@
 {
     "cSpell.words": [
         "actix",
-        "bitfield",
-        "bitfields",
-        "bitvec",
         "Deque",
         "dotenv",
         "dotenvy",
