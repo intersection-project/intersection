@@ -31,7 +31,7 @@ use anyhow::{bail, Context as _};
 use dotenvy::dotenv;
 use extensions::CustomGuildImpl;
 use poise::serenity_prelude as serenity;
-use std::{env, sync::Arc};
+use std::{collections::HashSet, env, ops::ControlFlow, sync::Arc};
 
 /// Information collected when compiled, by crate `built`
 pub mod build_info {
@@ -46,6 +46,95 @@ pub struct Data {
 }
 /// Type alias for the poise Context given our `Data` type
 type Context<'a> = poise::Context<'a, Data, anyhow::Error>;
+
+/// Confirms the user is aware of the number of mentions that will be created by a query
+///
+/// Called usually when there is more than 50 in a query.
+///
+/// Will return Ok(Continue) if the user accepted, Ok(Break) if the user cancelled or timed out,
+/// and Err if there was an error.
+async fn confirm_mention_count(
+    ctx: &serenity::Context,
+    msg: &serenity::Message,
+    stringified_mentions: &Vec<String>,
+    members_to_ping: &HashSet<serenity::UserId>,
+) -> anyhow::Result<ControlFlow<(), ()>> {
+    let serenity::Channel::Guild(channel) = msg.channel(ctx).await? else {
+        // DMs would have been prevented already.
+        // Messages can't be sent in categories
+        bail!("unreachable");
+    };
+
+    let mut m = channel
+        .send_message(ctx, |m| {
+            m.content(format!(
+                concat!(
+                    "**Hold up!** By running this query, you are about to",
+                    " mention {} people.{} Are you sure?"
+                ),
+                members_to_ping.len(),
+                {
+                    let len = util::wrap_string_vec(&stringified_mentions, " ", 2000)
+                        .unwrap() // TODO: Remove unwrap?
+                        .len();
+                    if len > 2 {
+                        format!(" This will require the sending of {len} messages.")
+                    } else {
+                        String::new()
+                    }
+                }
+            ))
+            .reference_message(msg) // basically makes it a reply
+            .components(|components| {
+                components.create_action_row(|action_row| {
+                    action_row
+                        .create_button(|button| {
+                            button
+                                .custom_id("large_ping_confirm_no")
+                                .emoji(serenity::ReactionType::Unicode("❌".to_string()))
+                                .label("Cancel")
+                                .style(serenity::ButtonStyle::Secondary)
+                        })
+                        .create_button(|button| {
+                            button
+                                .custom_id("large_ping_confirm_yes")
+                                .emoji(serenity::ReactionType::Unicode("✅".to_string()))
+                                .label("Yes")
+                                .style(serenity::ButtonStyle::Primary)
+                        })
+                })
+            })
+        })
+        .await?;
+
+    let Some(interaction) = m.await_component_interaction(ctx)
+            .collect_limit(1)
+            .author_id(msg.author.id)
+            .timeout(std::time::Duration::from_secs(30))
+            .await else {
+                m.edit(ctx, |m| m.content("Timed out waiting for confirmation.").components(|components| components)).await?;
+                return Ok(ControlFlow::Break(()));
+            };
+
+    if interaction.data.custom_id == "large_ping_confirm_no" {
+        m.edit(ctx, |m| {
+            m.content("Cancelled.").components(|components| components)
+        })
+        .await?;
+
+        return Ok(ControlFlow::Break(()));
+    } else if interaction.data.custom_id == "large_ping_confirm_yes" {
+        m.edit(ctx, |m| {
+            m.content("Confirmed.").components(|components| components)
+        })
+        .await?;
+
+        // continue normally!
+        return Ok(ControlFlow::Continue(()));
+    }
+
+    bail!("unreachable");
+}
 
 /// Handle a DRQL query from a message, sending the response message(s) to the channel.
 async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> anyhow::Result<()> {
@@ -109,78 +198,9 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
         .collect::<Vec<_>>();
 
     if members_to_ping.len() > 50 {
-        let serenity::Channel::Guild(channel) = msg.channel(ctx).await? else {
-            // DMs would have been prevented already.
-            // Categories can't have messages sent duh
-            bail!("unreachable");
-        };
-        let mut m = channel
-            .send_message(ctx, |m| {
-                m.content(format!(
-                    concat!(
-                        "**Hold up!** By running this query, you are about to",
-                        " mention {} people.{} Are you sure?"
-                    ),
-                    members_to_ping.len(),
-                    {
-                        let len = util::wrap_string_vec(&stringified_mentions, " ", 2000)
-                            .unwrap() // TODO: Remove unwrap?
-                            .len();
-                        if len > 2 {
-                            format!(" This will require the sending of {len} messages.")
-                        } else {
-                            String::new()
-                        }
-                    }
-                ))
-                .reference_message(msg) // basically makes it a reply
-                .components(|components| {
-                    components.create_action_row(|action_row| {
-                        action_row
-                            .create_button(|button| {
-                                button
-                                    .custom_id("large_ping_confirm_no")
-                                    .emoji(serenity::ReactionType::Unicode("❌".to_string()))
-                                    .label("Cancel")
-                                    .style(serenity::ButtonStyle::Secondary)
-                            })
-                            .create_button(|button| {
-                                button
-                                    .custom_id("large_ping_confirm_yes")
-                                    .emoji(serenity::ReactionType::Unicode("✅".to_string()))
-                                    .label("Yes")
-                                    .style(serenity::ButtonStyle::Primary)
-                            })
-                    })
-                })
-            })
-            .await?;
-
-        let Some(interaction) = m.await_component_interaction(ctx)
-            .collect_limit(1)
-            .author_id(msg.author.id)
-            .timeout(std::time::Duration::from_secs(30))
-            .await else {
-                m.edit(ctx, |m| m.content("Timed out waiting for confirmation.").components(|components| components)).await?;
-                return Ok(());
-            };
-
-        if interaction.data.custom_id == "large_ping_confirm_no" {
-            m.edit(ctx, |m| {
-                m.content("Cancelled.").components(|components| components)
-            })
-            .await?;
-
+        if let ControlFlow::Break(_) = confirm_mention_count(ctx, msg, &stringified_mentions, &members_to_ping).await? {
+            // The user declined or the operation timed out. The message has already been edited for us.
             return Ok(());
-        } else if interaction.data.custom_id == "large_ping_confirm_yes" {
-            m.edit(ctx, |m| {
-                m.content("Confirmed.").components(|components| components)
-            })
-            .await?;
-
-            // let it continue!
-        } else {
-            unreachable!();
         }
     }
 
@@ -261,7 +281,7 @@ impl serenity::EventHandler for Handler {
 async fn main() -> Result<(), anyhow::Error> {
     // We ignore the error because environment variables may be passed
     // in directly, and .env might not exist (e.g. in Docker with --env-file)
-    let _ = dotenv();
+    let _: Result<_, _> = dotenv();
 
     let framework: poise::FrameworkBuilder<Data, anyhow::Error> = poise::Framework::builder()
         .options(poise::FrameworkOptions {
