@@ -74,7 +74,7 @@ async fn confirm_mention_count(
                 ),
                 members_to_ping.len(),
                 {
-                    let len = util::wrap_string_vec(&stringified_mentions, " ", 2000)
+                    let len = util::wrap_string_vec(stringified_mentions, " ", 2000)
                         .unwrap() // TODO: Remove unwrap?
                         .len();
                     if len > 2 {
