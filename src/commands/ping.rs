@@ -1,6 +1,7 @@
-use super::super::Context;
 use anyhow::Context as _;
 use poise::serenity_prelude::ShardId;
+
+use super::super::Context;
 
 /// Check if Intersection is online
 #[poise::command(slash_command)]

@@ -1,6 +1,5 @@
-use crate::util;
-
 use super::super::super::Context;
+use crate::util;
 
 /// Learn about how Intersection works, and how we could use your help!
 #[poise::command(slash_command)]

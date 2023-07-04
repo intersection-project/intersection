@@ -1,6 +1,9 @@
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
+
 use bitvec::prelude::*;
-use std::collections::{HashMap, HashSet};
-use std::hash::Hash;
 
 /// Results from [`unionize_set`].
 #[derive(Debug, PartialEq, Eq)]

@@ -1,6 +1,5 @@
-use crate::util;
-
 use super::super::super::Context;
+use crate::util;
 
 /// Learn some of the DRQL syntax and how to use it!
 #[poise::command(slash_command)]

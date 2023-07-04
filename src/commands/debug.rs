@@ -1,6 +1,6 @@
-use super::super::drql;
-use super::super::Context;
 use anyhow::bail;
+
+use super::super::{drql, Context};
 
 /// Debug DRQL queries or the DRQL facilities itself
 #[poise::command(slash_command, subcommands("scan", "parse_one", "reduce"))]

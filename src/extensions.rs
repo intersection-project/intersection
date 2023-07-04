@@ -2,10 +2,12 @@
 //!
 //! This module provides some custom traits on Serenity types.
 
-use crate::models;
+use std::collections::{HashMap, HashSet};
+
 use anyhow::Context as _;
 use poise::serenity_prelude as serenity;
-use std::collections::{HashMap, HashSet};
+
+use crate::models;
 
 /// Custom trait implemented on all [`serenity::Member`]s
 pub trait CustomMemberImpl {
