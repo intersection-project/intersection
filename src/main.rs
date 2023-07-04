@@ -107,14 +107,20 @@ async fn confirm_mention_count(
         })
         .await?;
 
-    let Some(interaction) = m.await_component_interaction(ctx)
-            .collect_limit(1)
-            .author_id(msg.author.id)
-            .timeout(std::time::Duration::from_secs(30))
-            .await else {
-                m.edit(ctx, |m| m.content("Timed out waiting for confirmation.").components(|components| components)).await?;
-                return Ok(ControlFlow::Break(()));
-            };
+    let Some(interaction) = m
+        .await_component_interaction(ctx)
+        .collect_limit(1)
+        .author_id(msg.author.id)
+        .timeout(std::time::Duration::from_secs(30))
+        .await
+    else {
+        m.edit(ctx, |m| {
+            m.content("Timed out waiting for confirmation.")
+                .components(|components| components)
+        })
+        .await?;
+        return Ok(ControlFlow::Break(()));
+    };
 
     if interaction.data.custom_id == "large_ping_confirm_no" {
         m.edit(ctx, |m| {
@@ -198,7 +204,9 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
         .collect::<Vec<_>>();
 
     if members_to_ping.len() > 50 {
-        if let ControlFlow::Break(_) = confirm_mention_count(ctx, msg, &stringified_mentions, &members_to_ping).await? {
+        if let ControlFlow::Break(_) =
+            confirm_mention_count(ctx, msg, &stringified_mentions, &members_to_ping).await?
+        {
             // The user declined or the operation timed out. The message has already been edited for us.
             return Ok(());
         }
