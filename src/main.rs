@@ -27,11 +27,12 @@ lalrpop_mod!(
     parser
 );
 
+use std::{env, sync::Arc};
+
 use anyhow::{bail, Context as _};
 use dotenvy::dotenv;
 use extensions::CustomGuildImpl;
 use poise::serenity_prelude as serenity;
-use std::{env, sync::Arc};
 
 /// Information collected when compiled, by crate `built`
 pub mod build_info {
@@ -156,14 +157,20 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
             })
             .await?;
 
-        let Some(interaction) = m.await_component_interaction(ctx)
+        let Some(interaction) = m
+            .await_component_interaction(ctx)
             .collect_limit(1)
             .author_id(msg.author.id)
             .timeout(std::time::Duration::from_secs(30))
-            .await else {
-                m.edit(ctx, |m| m.content("Timed out waiting for confirmation.").components(|components| components)).await?;
-                return Ok(());
-            };
+            .await
+        else {
+            m.edit(ctx, |m| {
+                m.content("Timed out waiting for confirmation.")
+                    .components(|components| components)
+            })
+            .await?;
+            return Ok(());
+        };
 
         if interaction.data.custom_id == "large_ping_confirm_no" {
             m.edit(ctx, |m| {

@@ -1,7 +1,8 @@
 //! Lexer for the DRQL language
 
-use logos::{Lexer, Logos};
 use std::num::ParseIntError;
+
+use logos::{Lexer, Logos};
 
 /// Any value attached to a span within source text.
 pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;

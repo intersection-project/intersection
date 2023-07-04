@@ -1,9 +1,9 @@
 //! Wrapper for the DRQL parser
 
-use super::ast;
-use super::lexer;
-use crate::parser;
 use lalrpop_util::ParseError;
+
+use super::{ast, lexer};
+use crate::parser;
 
 /// Parse a DRQL expression with the DRQL parser.
 pub fn parse_drql(
@@ -14,9 +14,10 @@ pub fn parse_drql(
 
 #[cfg(test)]
 mod tests {
+    use poise::serenity_prelude::model::prelude::{RoleId, UserId};
+
     use super::*;
     use crate::drql::ast::Expr;
-    use poise::serenity_prelude::model::prelude::{RoleId, UserId};
 
     #[test]
     fn many_token_types() {

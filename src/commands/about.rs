@@ -4,8 +4,9 @@ mod intersection;
 mod landing;
 mod set_theory;
 
-use super::super::Context;
 use anyhow::bail;
+
+use super::super::Context;
 
 /// Learn about Intersection, how it works, and how to use it!
 #[poise::command(

@@ -1,7 +1,7 @@
-use super::super::build_info;
-use super::super::Context;
 use anyhow::Context as _;
 use chrono::DateTime;
+
+use super::super::{build_info, Context};
 
 /// Returns `[Display Name](crate url) vCRATE_VERSION`
 fn crate_version(display_name: &str, crate_name: &str) -> String {

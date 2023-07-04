@@ -1,12 +1,14 @@
 //! Utilities and functions for interpreting DRQL queries
 
-use super::ast::Expr;
+use std::collections::HashSet;
+
 use async_recursion::async_recursion;
 use poise::{
     async_trait,
     serenity_prelude::{RoleId, UserId},
 };
-use std::collections::HashSet;
+
+use super::ast::Expr;
 
 /// Describes a set of functions used to resolve values in [interpret].
 #[allow(clippy::module_name_repetitions)]
@@ -57,8 +59,9 @@ mod tests {
     use super::*;
 
     mod basic_cases {
-        use super::*;
         use anyhow::anyhow;
+
+        use super::*;
 
         // In this case, the resolver uses some basic predefined values.
         struct Resolver {}
