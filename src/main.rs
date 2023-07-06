@@ -172,10 +172,6 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
     .await
     .context("Error calculating result")?;
 
-    // Now that we know which members we have to notify, we can do some specialized calculations
-    // to try to replace members in that set with existing roles in the server. First, we choose our
-    // "qualifiers" -- any role in this server that is a **subset** of our members_to_ping.
-
     // A hashmap of every role in the guild and its members.
     let roles_and_their_members = guild.all_roles_and_members(ctx)?;
 
