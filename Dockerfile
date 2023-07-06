@@ -14,7 +14,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN cargo build --release
 
-FROM debian:buster-slim
+FROM debian:latest
 WORKDIR /app
 COPY --from=builder /app/target/release/intersection /usr/local/bin
 ENTRYPOINT ["/usr/local/bin/intersection"]
