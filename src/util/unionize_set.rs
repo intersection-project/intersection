@@ -51,7 +51,8 @@ where
 /// ## Panics
 ///
 /// Panics if the total number of unique Values in `preexisting_sets` and target is greater than `usize::MAX`.
-// FIXME: Very slow on debug builds but not on release builds
+// FIXME: Very slow on debug builds (40+ seconds on fuzz case below) but not on release builds (4 seconds)
+#[allow(clippy::too_many_lines)] // If someone wants to make this shorter, good luck.
 pub fn unionize_set<'a, Key, Value>(
     target: &'a HashSet<Value>,
     preexisting_sets: &'a HashMap<Key, HashSet<Value>>,
