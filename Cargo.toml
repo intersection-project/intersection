@@ -20,6 +20,8 @@ dotenvy = "0.15.7"
 json = "0.12.4"
 lalrpop-util = "0.20.0"
 lazy_static = "1.4.0"
+log = { version = "0.4.19", features = ["std"] }
+log4rs = "1.2.0"
 logos = "0.13.0"
 poise = "0.5.5"
 regex = "1.9.1"

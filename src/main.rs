@@ -27,6 +27,8 @@ lalrpop_mod!(
     parser
 );
 
+use log::{debug, error, info, trace, warn};
+use log4rs::config::Deserializers;
 use std::{collections::HashSet, env, ops::ControlFlow, sync::Arc};
 
 use anyhow::{bail, Context as _};
@@ -265,7 +267,6 @@ impl serenity::EventHandler for Handler {
         if msg.author.bot {
             return;
         }
-
         if drql::scanner::scan(msg.content.as_str()).count() > 0 {
             match handle_drql_query(&ctx, &msg)
                 .await
@@ -288,6 +289,8 @@ async fn main() -> Result<(), anyhow::Error> {
     // in directly, and .env might not exist (e.g. in Docker with --env-file)
     let _: Result<_, _> = dotenv();
 
+    log4rs::init_file("log4rs.yml", Deserializers::default()).unwrap();
+
     let framework: poise::FrameworkBuilder<Data, anyhow::Error> = poise::Framework::builder()
         .options(poise::FrameworkOptions {
             commands: vec![
@@ -304,14 +307,14 @@ async fn main() -> Result<(), anyhow::Error> {
         .intents(serenity::GatewayIntents::all())
         .setup(|ctx, ready, framework| {
             Box::pin(async move {
-                println!(
+                info!(
                     "Logged in as {}#{}!",
                     ready.user.name, ready.user.discriminator
                 );
 
-                println!("Registering global application (/) commands...");
+                info!("Registering global application (/) commands...");
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-                println!("Finished registering global application (/) commands.");
+                info!("Finished registering global application (/) commands.");
 
                 Ok(Data {
                     shard_manager: Arc::clone(framework.shard_manager()),

@@ -1,4 +1,5 @@
 use anyhow::Context as _;
+use log::warn;
 use poise::serenity_prelude as serenity;
 
 /// Find the application command `/name` and return the string mentioning that application command.
@@ -25,7 +26,7 @@ pub async fn mention_application_command(
     if let Some(command) = command {
         Ok(format!("</{}:{}>", command_string, command.id.0))
     } else {
-        println!("WARN: Attempt to mention the command \"{command_string}\" (root command {command_name}) which was not found!");
+        warn!("Attempt to mention the command \"{command_string}\" (root command {command_name}) which was not found!");
         Ok(format!("`/{command_string}`"))
     }
 }
