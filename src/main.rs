@@ -1,11 +1,12 @@
 #![doc = include_str!("../README.md")]
-#![warn(clippy::cargo)]
-#![allow(clippy::multiple_crate_versions)]
-#![warn(clippy::nursery)]
-#![warn(clippy::pedantic)]
-#![allow(clippy::unused_async)] // command functions must be async
-#![warn(missing_docs)]
-#![warn(clippy::missing_docs_in_private_items)]
+#![warn(
+    clippy::cargo,
+    clippy::nursery,
+    clippy::pedantic,
+    clippy::missing_docs_in_private_items,
+    missing_docs
+)]
+#![allow(clippy::multiple_crate_versions, clippy::unused_async)]
 
 mod commands;
 mod drql;
