@@ -18,6 +18,8 @@ pub struct Resolver<'a> {
     pub member: &'a serenity::Member,
     /// The Context made available to the command
     pub ctx: &'a serenity::Context,
+    /// THe channel the query was originally sent in
+    pub channel: &'a serenity::GuildChannel,
 }
 #[async_trait]
 impl<'a> InterpreterResolver<anyhow::Error> for Resolver<'a> {
@@ -111,7 +113,9 @@ impl<'a> InterpreterResolver<anyhow::Error> for Resolver<'a> {
             match (member, role) {
                 (Some(member), None) => self.resolve_user_id(member.user.id).await,
 
-                (None, Some(role)) if !self.member.can_mention_role(self.ctx, role)? => {
+                (None, Some(role))
+                    if !self.member.can_mention_role(self.ctx, role, self.channel)? =>
+                {
                     bail!(
                         concat!(
                             "The role {} is not mentionable and you do not have",
@@ -149,7 +153,9 @@ impl<'a> InterpreterResolver<anyhow::Error> for Resolver<'a> {
 
                 (Ok(member), None) => self.resolve_user_id(member.user.id).await,
 
-                (Err(_), Some(role)) if !self.member.can_mention_role(self.ctx, role)? => {
+                (Err(_), Some(role))
+                    if !self.member.can_mention_role(self.ctx, role, self.channel)? =>
+                {
                     bail!(
                         concat!(
                             "The role {} is not mentionable and you do not have",
