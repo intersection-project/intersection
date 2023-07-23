@@ -33,7 +33,7 @@ use std::{collections::HashSet, env, ops::ControlFlow, sync::Arc};
 use anyhow::{bail, Context as _};
 use dotenvy::dotenv;
 use extensions::CustomGuildImpl;
-use poise::serenity_prelude::* as serenity;
+use poise::serenity_prelude as serenity;
 
 /// Information collected when compiled, by crate `built`
 pub mod build_info {
