@@ -33,7 +33,7 @@ use std::{collections::HashSet, env, ops::ControlFlow, sync::Arc};
 use anyhow::{bail, Context as _};
 use dotenvy::dotenv;
 use extensions::CustomGuildImpl;
-use poise::serenity_prelude as serenity;
+use poise::serenity_prelude::{self as serenity, Channel, GuildChannel};
 
 /// Information collected when compiled, by crate `built`
 pub mod build_info {
@@ -161,6 +161,11 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
         .context("There is no DRQL query in your message to handle.")?; // This should never happen, as we already checked that there was at least one chunk in the input
 
     let guild = msg.guild(ctx).context("Unable to resolve guild")?;
+    let Channel::Guild(channel) = msg.channel(ctx).await? else {
+        // DMs would have been prevented already.
+        // Messages can't be sent in categories
+        bail!("unreachable");
+    };
 
     let members_to_ping = drql::interpreter::interpret(
         ast,
@@ -168,6 +173,7 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
             guild: &guild,
             member: &msg.member(ctx).await?,
             ctx,
+            channel: &channel,
         },
     )
     .await

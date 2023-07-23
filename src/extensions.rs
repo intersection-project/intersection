@@ -16,6 +16,7 @@ pub trait CustomMemberImpl {
         &self,
         ctx: &serenity::Context,
         role: &serenity::Role,
+        channel: &serenity::GuildChannel,
     ) -> anyhow::Result<bool>;
 }
 impl CustomMemberImpl for serenity::Member {
@@ -23,10 +24,17 @@ impl CustomMemberImpl for serenity::Member {
         &self,
         ctx: &serenity::Context,
         role: &serenity::Role,
+        channel: &serenity::GuildChannel,
     ) -> anyhow::Result<bool> {
-        Ok(role.mentionable
-            || (self.permissions(ctx)?.mention_everyone())
-            || (self.permissions(ctx)?.administrator()))
+        let guild_permissions = self.permissions(ctx)?;
+        let channel_permissions = channel.permissions_for_user(ctx, self)?;
+
+        Ok(
+            guild_permissions.administrator() // there is no such thing as administrator within a channel
+            || role.mentionable
+            || guild_permissions.mention_everyone()
+            || channel_permissions.mention_everyone(), // see issue #46
+        )
     }
 }
 
