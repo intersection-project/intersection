@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::Context as _;
 use poise::serenity_prelude as serenity;
+use tracing::debug;
 
 use crate::models;
 
@@ -24,9 +25,28 @@ impl CustomMemberImpl for serenity::Member {
         ctx: &serenity::Context,
         role: &serenity::Role,
     ) -> anyhow::Result<bool> {
-        Ok(role.mentionable
-            || (self.permissions(ctx)?.mention_everyone())
-            || (self.permissions(ctx)?.administrator()))
+        Ok(if role.mentionable {
+            debug!(
+                "{} can mention role {} because the role is mentionable by all",
+                self.user.id, role.id
+            );
+            true
+        } else if self.permissions(ctx)?.mention_everyone() {
+            debug!(
+                "{} can mention role {} because the user can mention everyone",
+                self.user.id, role.id
+            );
+            true
+        } else if self.permissions(ctx)?.administrator() {
+            debug!(
+                "{} can mention role {} because the user is an administrator",
+                self.user.id, role.id
+            );
+            true
+        } else {
+            debug!("{} cannot mention role {}", self.user.id, role.id);
+            false
+        })
     }
 }
 

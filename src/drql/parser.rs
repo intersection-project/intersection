@@ -1,15 +1,20 @@
 //! Wrapper for the DRQL parser
 
 use lalrpop_util::ParseError;
+use tap::Tap;
+use tracing::{debug, instrument};
 
 use super::{ast, lexer};
 use crate::parser;
 
 /// Parse a DRQL expression with the DRQL parser.
+#[instrument]
 pub fn parse_drql(
     input: &str,
 ) -> Result<ast::Expr, ParseError<usize, lexer::Tok, lexer::LexicalError>> {
-    parser::ExprParser::new().parse(lexer::DrqlLexer::new(input))
+    parser::ExprParser::new()
+        .parse(lexer::DrqlLexer::new(input))
+        .tap(|ast| debug!("Parser result: {ast:?}"))
 }
 
 #[cfg(test)]

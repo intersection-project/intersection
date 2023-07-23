@@ -27,9 +27,9 @@ lalrpop_mod!(
     parser
 );
 
-use log::{debug, error, info, trace, warn};
-use log4rs::config::Deserializers;
 use std::{collections::HashSet, env, ops::ControlFlow, sync::Arc};
+use tracing::{debug, error, info, instrument, metadata::LevelFilter, trace, warn};
+use tracing_subscriber::{fmt::format::FmtSpan, prelude::*};
 
 use anyhow::{bail, Context as _};
 use dotenvy::dotenv;
@@ -56,6 +56,7 @@ type Context<'a> = poise::Context<'a, Data, anyhow::Error>;
 ///
 /// Will return Ok(Continue) if the user accepted, Ok(Break) if the user cancelled or timed out,
 /// and Err if there was an error.
+#[instrument(skip_all, fields(count = members_to_ping.len()))]
 async fn confirm_mention_count(
     ctx: &serenity::Context,
     msg: &serenity::Message,
@@ -67,6 +68,8 @@ async fn confirm_mention_count(
         // Messages can't be sent in categories
         bail!("unreachable");
     };
+
+    trace!("sending confirmation message");
 
     let mut m = channel
         .send_message(ctx, |m| {
@@ -110,6 +113,8 @@ async fn confirm_mention_count(
         })
         .await?;
 
+    trace!("waiting for confirmation");
+
     let Some(interaction) = m
         .await_component_interaction(ctx)
         .collect_limit(1)
@@ -117,6 +122,7 @@ async fn confirm_mention_count(
         .timeout(std::time::Duration::from_secs(30))
         .await
     else {
+        debug!("timed out waiting for confirmation");
         m.edit(ctx, |m| {
             m.content("Timed out waiting for confirmation.")
                 .components(|components| components)
@@ -126,6 +132,7 @@ async fn confirm_mention_count(
     };
 
     if interaction.data.custom_id == "large_ping_confirm_no" {
+        debug!("User cancelled operation");
         m.edit(ctx, |m| {
             m.content("Cancelled.").components(|components| components)
         })
@@ -133,6 +140,7 @@ async fn confirm_mention_count(
 
         return Ok(ControlFlow::Break(()));
     } else if interaction.data.custom_id == "large_ping_confirm_yes" {
+        debug!("User confirmed operation");
         m.edit(ctx, |m| {
             m.content("Confirmed.").components(|components| components)
         })
@@ -146,10 +154,14 @@ async fn confirm_mention_count(
 }
 
 /// Handle a DRQL query from a message, sending the response message(s) to the channel.
+#[instrument(skip_all)]
 async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> anyhow::Result<()> {
     if msg.guild(ctx).is_none() {
+        debug!("Ignoring DRQL query sent in DMs.");
         bail!("DRQL queries are not available in DMs.");
     }
+
+    trace!("Parsing queries in message...");
 
     let ast = drql::scanner::scan(msg.content.as_str())
         .enumerate()
@@ -161,18 +173,25 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
         .reduce(|acc, chunk| crate::drql::ast::Expr::Union(Box::new(acc), Box::new(chunk)))
         .context("There is no DRQL query in your message to handle.")?; // This should never happen, as we already checked that there was at least one chunk in the input
 
-    let guild = msg.guild(ctx).context("Unable to resolve guild")?;
+    debug!("Fully parsed and reduced AST: {ast:?}");
 
+    trace!("Fetching guild and member information");
+    let guild = msg.guild(ctx).context("Unable to resolve guild")?;
+    let member = msg.member(ctx).await?;
+
+    trace!("Running DRQL interpreter on AST");
     let members_to_ping = drql::interpreter::interpret(
         ast,
         &mut resolver::Resolver {
             guild: &guild,
-            member: &msg.member(ctx).await?,
+            member: &member,
             ctx,
         },
     )
     .await
     .context("Error calculating result")?;
+
+    debug!("We need to mention these members: {members_to_ping:?}");
 
     // A hashmap of every role in the guild and its members.
     let roles_and_their_members = guild.all_roles_and_members(ctx)?;
@@ -180,6 +199,12 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
     // next, we represent the list of users as a bunch of roles containing them and one outliers set.
     let util::unionize_set::UnionizeSetResult { sets, outliers } =
         util::unionize_set::unionize_set(&members_to_ping, &roles_and_their_members);
+
+    debug!(
+        "unionize_set result sets: {sets:?}, outliers: {outliers:?}",
+        sets = sets,
+        outliers = outliers
+    );
 
     // Now we need to split the output message into individual pings. First, stringify each user mention...
     // TODO: Once message splitting is complete this could result in a user being
@@ -202,18 +227,27 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
         .map(|x| x.to_string())
         .collect::<Vec<_>>();
 
+    debug!(
+        "stringified_mentions: {stringified_mentions:?}",
+        stringified_mentions = stringified_mentions
+    );
+
+    if stringified_mentions.is_empty() {
+        debug!("Nobody to mention!");
+        msg.reply(ctx, "No users matched.").await?;
+        return Ok(());
+    }
+
     if members_to_ping.len() > 50 {
+        debug!("need to wait for user to confirm large mention");
         if let ControlFlow::Break(_) =
             confirm_mention_count(ctx, msg, &stringified_mentions, &members_to_ping).await?
         {
+            debug!("User cancelled or timed out");
             // The user declined or the operation timed out. The message has already been edited for us.
             return Ok(());
         }
-    }
-
-    if stringified_mentions.is_empty() {
-        msg.reply(ctx, "No users matched.").await?;
-        return Ok(());
+        debug!("User confirmed!");
     }
 
     let notification_string = format!(
@@ -225,6 +259,7 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
     );
 
     if stringified_mentions.join(" ").len() <= (2000 - notification_string.len()) {
+        trace!("Sending single message for mentions");
         msg.reply(
             ctx,
             format!("{}{}", notification_string, stringified_mentions.join(" ")),
@@ -232,6 +267,7 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
         .await?;
     } else {
         let messages = util::wrap_string_vec(&stringified_mentions, " ", 2000)?;
+        trace!("Need to send {} messages.", messages.len());
         msg.reply(
             ctx,
             format!(
@@ -256,6 +292,8 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
         .await?;
     }
 
+    trace!("Query handling completed!");
+
     Ok(())
 }
 
@@ -263,19 +301,57 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
 struct Handler;
 #[serenity::async_trait]
 impl serenity::EventHandler for Handler {
+    #[instrument(skip_all, fields(author = msg.author.id.0, content = msg.content))]
     async fn message(&self, ctx: serenity::Context, msg: serenity::Message) {
+        debug!("Received new message event");
+
         if msg.author.bot {
+            debug!("Ignoring message from bot.");
             return;
         }
+
         if drql::scanner::scan(msg.content.as_str()).count() > 0 {
+            debug!("Found DRQL queries in message! Handling queries.");
             match handle_drql_query(&ctx, &msg)
                 .await
                 .context("Error handling DRQL query")
             {
-                Ok(_) => {}
+                Ok(_) => debug!("Finished handling queries."),
+
                 Err(query_err) => {
-                    if let Err(message_send_err) = msg.reply(ctx, format!("{query_err:#}")).await {
-                        panic!("Error sending error message: {message_send_err:#}");
+                    // THIS IS NOT OUR FAULT -- This most likely means the USER made a mistake
+                    debug!(
+                        "An error occurred handling the DRQL query, notifying user: {query_err:#}"
+                    );
+
+                    if let Err(message_send_err) = msg.reply(&ctx, format!("{query_err:#}")).await {
+                        warn!("An error occurred while notifying the user of a query error: {message_send_err:#}");
+                        warn!("Initial query error: {query_err:#}");
+                        debug!("Trying again...");
+
+                        if let Err(double_message_send_err) = msg
+                            .reply(
+                                &ctx,
+                                format!(
+                                    concat!(
+                                        "{query_err:#}\n",
+                                        "Additionally, we attempted to send this error to you but this failed:",
+                                        " {message_send_err:#}"
+                                    ),
+                                    query_err = query_err,
+                                    message_send_err = message_send_err
+                                ),
+                            )
+                            .await
+                        {
+                            // Oh god the error message.
+                            error!("Failed to notify a user of an error notifying them of an error notifying them of a query error: {double_message_send_err:#}");
+                            error!("We were attempting to notify them of this error: {message_send_err:#}");
+                            error!("That error occurred while notifying them of this error: {query_err:#}");
+                            error!("Message sending failed twice! Giving up.");
+                        } else {
+                            debug!("Alright, it worked that time.");
+                        }
                     }
                 }
             }
@@ -289,7 +365,16 @@ async fn main() -> Result<(), anyhow::Error> {
     // in directly, and .env might not exist (e.g. in Docker with --env-file)
     let _: Result<_, _> = dotenv();
 
-    log4rs::init_file("log4rs.yml", Deserializers::default()).unwrap();
+    let filter = tracing_subscriber::EnvFilter::builder().parse(
+        std::env::var("RUST_LOG").unwrap_or_else(|_| "warn,intersection=info".to_string()),
+    )?;
+
+    // Note: We do not log spans by default, as they are very verbose.
+    // To enable these, add the .with_span_events() call to the stdout_log layer.
+
+    let stdout_log = tracing_subscriber::fmt::layer().with_filter(filter);
+
+    tracing_subscriber::registry().with(stdout_log).init();
 
     let framework: poise::FrameworkBuilder<Data, anyhow::Error> = poise::Framework::builder()
         .options(poise::FrameworkOptions {

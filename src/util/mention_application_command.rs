@@ -1,6 +1,6 @@
 use anyhow::Context as _;
-use log::warn;
 use poise::serenity_prelude as serenity;
+use tracing::warn;
 
 /// Find the application command `/name` and return the string mentioning that application command.
 ///

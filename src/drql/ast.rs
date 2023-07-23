@@ -1,5 +1,7 @@
 //! Abstract Syntax Tree enum for DRQL
 
+use std::fmt::{Display, Formatter};
+
 use poise::serenity_prelude::model::prelude::{RoleId, UserId};
 
 /// Represents a single DRQL query, or a view into that query
@@ -24,4 +26,25 @@ pub enum Expr {
     ///
     /// This is generated when a user is mentioned directly in a query.
     RoleID(RoleId),
+}
+
+impl Display for Expr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Union(l, r) => write!(f, "({l} | {r})"),
+            Self::Intersection(l, r) => write!(f, "({l} & {r})"),
+            Self::Difference(l, r) => write!(f, "({l} - {r})"),
+
+            Self::StringLiteral(l) => {
+                if l.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                    write!(f, "{l}")
+                } else {
+                    write!(f, "\"{l}\"")
+                }
+            }
+            Self::UnknownID(id) => write!(f, "{id}"),
+            Self::UserID(id) => write!(f, "<@{id}>"),
+            Self::RoleID(id) => write!(f, "<@&{id}>"),
+        }
+    }
 }
