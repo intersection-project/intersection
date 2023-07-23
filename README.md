@@ -4,6 +4,8 @@
 
 </div>
 
+Are you looking to invite the bot? This information is for developers, not for users! [Invite the bot here.](https://discord.com/api/oauth2/authorize?client_id=1080306848021872710&permissions=378226068544&scope=bot%20applications.commands)
+
 Intersection is a Discord bot and software suite that empowers Discord's @-mentions with advanced
 concepts with their roots in set theory, such as taking the **intersection** of two roles.
 
