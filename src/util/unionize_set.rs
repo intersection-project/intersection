@@ -5,7 +5,7 @@ use std::{
 };
 
 use bitvec::prelude::*;
-use tracing::{debug, info, instrument, trace, warn};
+use tracing::{debug, instrument, trace, warn};
 
 /// Results from [`unionize_set`].
 #[derive(Debug, PartialEq, Eq)]
@@ -282,29 +282,25 @@ where
                     .enumerate()
                     .find(|(i, _)| is_distinct(*i));
 
-                match first_distinct_set {
+                if let Some((i, _)) = first_distinct_set {
                     // If there is a distinct set, use it
-                    Some((i, _)) => {
-                        trace!("Using the first distinct set");
-                        bitfields_with_max_size[i]
-                    }
-
-                    None => {
-                        trace!("There is no distinct set, finding the set with the most elements unique relative to the conflicting sets");
-                        // Otherwise, we find whichever set has the most elements unique to just
-                        // that set relative to the conflicting sets and choose that one.
-                        // The elements unique to a set A given B and C is just A & ~(B | C).
-                        *bitfields_with_max_size
-                            .iter()
-                            .enumerate()
-                            .max_by_key(|(index, (_, bitfield))| {
-                                // The order here appears flipped because BitVec has an impl for BitVec & &BitVec
-                                // but not &BitVec & BitVec
-                                (!union_of_all_bitfields_except(*index) & *bitfield).count_ones()
-                            })
-                            .expect("bitfields_with_max_size is empty")
-                            .1 // unreachable as the unreachable!() at 0 above would be called
-                    }
+                    trace!("Using the first distinct set");
+                    bitfields_with_max_size[i]
+                } else {
+                    trace!("There is no distinct set, finding the set with the most elements unique relative to the conflicting sets");
+                    // Otherwise, we find whichever set has the most elements unique to just
+                    // that set relative to the conflicting sets and choose that one.
+                    // The elements unique to a set A given B and C is just A & ~(B | C).
+                    *bitfields_with_max_size
+                        .iter()
+                        .enumerate()
+                        .max_by_key(|(index, (_, bitfield))| {
+                            // The order here appears flipped because BitVec has an impl for BitVec & &BitVec
+                            // but not &BitVec & BitVec
+                            (!union_of_all_bitfields_except(*index) & *bitfield).count_ones()
+                        })
+                        .expect("bitfields_with_max_size is empty") // unreachable as the unreachable!() at 0 above would be called
+                        .1
                 }
             }
         };

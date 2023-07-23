@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use anyhow::{bail, Context as _};
 use poise::{async_trait, serenity_prelude as serenity};
 use tap::Tap;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{debug, error, instrument, trace};
 
 use crate::{
     drql::interpreter::InterpreterResolver,
@@ -185,8 +185,11 @@ impl<'a> InterpreterResolver<anyhow::Error> for Resolver<'a> {
             let possible_member = self.guild.member(self.ctx, id).await;
             let possible_role = self.guild.roles.get(&serenity::RoleId::from(id));
 
-            debug!("Possible member: {:?}", possible_member);
-            debug!("Possible role: {:?}", possible_role);
+            debug!(
+                "Possible member: {:?}",
+                possible_member.as_ref().map(|m| m.user.id.0)
+            );
+            debug!("Possible role: {:?}", possible_role.map(|r| r.id.0));
 
             match (possible_member, possible_role) {
                 (Ok(_), Some(_)) => {

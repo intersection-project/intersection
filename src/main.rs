@@ -28,8 +28,8 @@ lalrpop_mod!(
 );
 
 use std::{collections::HashSet, env, ops::ControlFlow, sync::Arc};
-use tracing::{debug, error, info, instrument, metadata::LevelFilter, trace, warn};
-use tracing_subscriber::{fmt::format::FmtSpan, prelude::*};
+use tracing::{debug, error, info, instrument, trace, warn};
+use tracing_subscriber::prelude::*;
 
 use anyhow::{bail, Context as _};
 use dotenvy::dotenv;
