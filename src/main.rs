@@ -191,7 +191,10 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
     .await
     .context("Error calculating result")?;
 
-    debug!("We need to mention these members: {members_to_ping:?}");
+    debug!(
+        "We need to mention these members: {:?}",
+        members_to_ping.iter().map(|id| id.0).collect::<Vec<_>>()
+    );
 
     // A hashmap of every role in the guild and its members.
     let roles_and_their_members = guild.all_roles_and_members(ctx)?;

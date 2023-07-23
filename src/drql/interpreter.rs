@@ -7,7 +7,7 @@ use poise::{
     async_trait,
     serenity_prelude::{RoleId, UserId},
 };
-use tracing::{instrument, trace};
+use tracing::instrument;
 
 use super::ast::Expr;
 
@@ -27,7 +27,7 @@ pub trait InterpreterResolver<E> {
 
 /// Interpret a DRQL AST, deferring to the Resolver to resolve string literals, user IDs, and role IDs.
 #[async_recursion]
-#[instrument(skip_all, fields(node = format!("{node}")))]
+#[instrument(skip_all, fields(node = %node))]
 pub async fn interpret<E: Send>(
     node: Expr,
     resolver: &mut (impl InterpreterResolver<E> + Send),

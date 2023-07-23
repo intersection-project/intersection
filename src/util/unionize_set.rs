@@ -223,7 +223,13 @@ where
             .filter(|(_, bitfield)| bitfield.count_ones() == max_size)
             .collect::<Vec<_>>();
 
-        trace!("Max size: {max_size}, bitfields with max size: {bitfields_with_max_size:?}");
+        trace!(
+            "Max size: {max_size}, bitfields with max size: {:?}",
+            bitfields_with_max_size
+                .iter()
+                .map(|(x, _)| x)
+                .collect::<Vec<_>>()
+        );
 
         // Depending on how many bitfields we have with the maximum size, there's a few different
         // ways we could handle this.
@@ -303,7 +309,7 @@ where
             }
         };
 
-        debug!("Selected set: {selected_set:?}");
+        debug!("Selected set: {:?}", selected_set.0);
 
         output_keys.insert(***selected_set.0);
 
