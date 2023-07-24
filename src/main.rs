@@ -35,7 +35,7 @@ use dotenvy::dotenv;
 use extensions::CustomGuildImpl;
 use poise::serenity_prelude as serenity;
 use tracing::{debug, error, info, instrument, trace, warn};
-use tracing_subscriber::{fmt::format, prelude::*};
+use tracing_subscriber::prelude::*;
 
 /// Information collected when compiled, by crate `built`
 pub mod build_info {
