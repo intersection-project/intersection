@@ -34,7 +34,7 @@ use dotenvy::dotenv;
 use extensions::CustomGuildImpl;
 use poise::serenity_prelude as serenity;
 use tracing::{debug, error, info, instrument, trace, warn};
-use tracing_subscriber::prelude::*;
+use tracing_subscriber::{fmt::format, prelude::*};
 
 /// Information collected when compiled, by crate `built`
 pub mod build_info {
@@ -375,9 +375,23 @@ async fn main() -> Result<(), anyhow::Error> {
     // Note: We do not log spans by default, as they are very verbose.
     // To enable these, add the .with_span_events() call to the stdout_log layer.
 
-    let stdout_log = tracing_subscriber::fmt::layer().with_filter(filter);
+    // Make sure to keep the _log_file_guard, if it goes out of scope the log file will be flushed and closed!
+    // It's kept to be able to flush quickly in the case of abrupt process termination while stack is unwinding.
+    let (non_blocking_log_file, _log_file_guard) = tracing_appender::non_blocking(
+        tracing_appender::rolling::daily("./logs", "intersection.log"),
+    );
 
-    tracing_subscriber::registry().with(stdout_log).init();
+    let rolling_appender = tracing_subscriber::fmt::layer()
+        .with_ansi(false)
+        .with_writer(non_blocking_log_file);
+
+    let stdout_log = tracing_subscriber::fmt::layer().with_writer(std::io::stdout);
+
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(stdout_log)
+        .with(rolling_appender)
+        .init();
 
     let framework: poise::FrameworkBuilder<Data, anyhow::Error> = poise::Framework::builder()
         .options(poise::FrameworkOptions {
