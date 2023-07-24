@@ -176,9 +176,14 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
 
     debug!("Fully parsed and reduced AST: {ast:?}");
 
-    trace!("Fetching guild and member information");
+    trace!("Fetching guild, channel, and member information");
     let guild = msg.guild(ctx).context("Unable to resolve guild")?;
     let member = msg.member(ctx).await?;
+    let serenity::Channel::Guild(channel) = msg.channel(ctx).await? else {
+        // DMs would have been prevented already.
+        // Messages can't be sent in categories
+        bail!("unreachable");
+    };
 
     trace!("Running DRQL interpreter on AST");
     let members_to_ping = drql::interpreter::interpret(
@@ -187,6 +192,7 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
             guild: &guild,
             member: &member,
             ctx,
+            channel: &channel,
         },
     )
     .await

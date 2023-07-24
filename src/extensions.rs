@@ -17,6 +17,7 @@ pub trait CustomMemberImpl {
         &self,
         ctx: &serenity::Context,
         role: &serenity::Role,
+        channel: &serenity::GuildChannel,
     ) -> anyhow::Result<bool>;
 }
 impl CustomMemberImpl for serenity::Member {
@@ -24,29 +25,39 @@ impl CustomMemberImpl for serenity::Member {
         &self,
         ctx: &serenity::Context,
         role: &serenity::Role,
+        channel: &serenity::GuildChannel,
     ) -> anyhow::Result<bool> {
-        Ok(if role.mentionable {
-            debug!(
-                "{} can mention role {} because the role is mentionable by all",
-                self.user.id, role.id
-            );
-            true
-        } else if self.permissions(ctx)?.mention_everyone() {
-            debug!(
-                "{} can mention role {} because the user can mention everyone",
-                self.user.id, role.id
-            );
-            true
-        } else if self.permissions(ctx)?.administrator() {
+        let guild_permissions = self.permissions(ctx)?;
+        let channel_permissions = channel.permissions_for_user(ctx, self)?;
+
+        if guild_permissions.administrator() {
             debug!(
                 "{} can mention role {} because the user is an administrator",
                 self.user.id, role.id
             );
-            true
+            Ok(true)
+        } else if role.mentionable {
+            debug!(
+                "{} can mention role {} because the role is mentionable by all",
+                self.user.id, role.id
+            );
+            Ok(true)
+        } else if guild_permissions.mention_everyone() {
+            debug!(
+                "{} can mention role {} because the user can mention everyone",
+                self.user.id, role.id
+            );
+            Ok(true)
+        } else if channel_permissions.mention_everyone() {
+            debug!(
+                "{} can mention role {} because the user can mention everyone in this channel",
+                self.user.id, role.id
+            );
+            Ok(true)
         } else {
             debug!("{} cannot mention role {}", self.user.id, role.id);
-            false
-        })
+            Ok(false)
+        }
     }
 }
 
