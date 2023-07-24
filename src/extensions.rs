@@ -21,6 +21,7 @@ pub trait CustomMemberImpl {
     ) -> anyhow::Result<bool>;
 }
 impl CustomMemberImpl for serenity::Member {
+    #[allow(clippy::cognitive_complexity)]
     fn can_mention_role(
         &self,
         ctx: &serenity::Context,
