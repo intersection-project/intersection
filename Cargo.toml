@@ -25,7 +25,7 @@ poise = "0.5.5"
 regex = "1.9.1"
 tap = "1.0.1"
 tokio = { version = "1.29.1", features = ["macros", "rt-multi-thread"] }
-tracing = "0.1.37"
+tracing = { version = "0.1.37", features = ["release_max_level_info"] }
 tracing-appender = "0.2.2"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 
