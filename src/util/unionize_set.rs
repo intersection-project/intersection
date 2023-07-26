@@ -1,9 +1,11 @@
 use std::{
     collections::{HashMap, HashSet},
+    fmt::Debug,
     hash::Hash,
 };
 
 use bitvec::prelude::*;
+use tracing::{debug, instrument, trace, warn};
 
 /// Results from [`unionize_set`].
 #[derive(Debug, PartialEq, Eq)]
@@ -53,18 +55,23 @@ where
 /// Panics if the total number of unique Values in `preexisting_sets` and target is greater than `usize::MAX`.
 // FIXME: Very slow on debug builds (40+ seconds on fuzz case below) but not on release builds (4 seconds)
 #[allow(clippy::too_many_lines)] // If someone wants to make this shorter, good luck.
+#[instrument(skip_all)]
 pub fn unionize_set<'a, Key, Value>(
     target: &'a HashSet<Value>,
     preexisting_sets: &'a HashMap<Key, HashSet<Value>>,
 ) -> UnionizeSetResult<'a, Key, Value>
 where
-    Key: PartialEq + Eq + Hash + Copy,
-    Value: PartialEq + Eq + Hash + Copy,
+    Key: PartialEq + Eq + Hash + Copy + Debug,
+    Value: PartialEq + Eq + Hash + Copy + Debug,
 {
     // There's a fuzz test below that you can run (#[ignore]d by default) to try HUGE data sizes,
     // but we don't run by default as it takes 45+ seconds to run
 
-    // Filter out those preexisting_sets that aren't subsets of target
+    trace!("Running unionize_set");
+    trace!("Target set: {target:?}");
+    trace!("Pre-existing sets: {preexisting_sets:?}");
+
+    trace!("Filtering preexisting_sets for subsets of target");
     // FIXME: This step takes around 8 seconds with the large fuzz test that's found below.
     //        Probably the is_subset?
     let filtered_preexisting_sets = preexisting_sets
@@ -142,6 +149,7 @@ where
 
     // First, build the mappings between a Value and some i32.
     // FIXME: This step takes 10 seconds with the large fuzz test which is #[ignore]d below
+    trace!("Mapping every Value to i32 for bit index within bitfields");
     let mut next_id: usize = 0;
     let (value_to_index, index_to_value) = filtered_preexisting_sets
         .values()
@@ -159,6 +167,7 @@ where
 
     // We can now construct the bitfield for each set and target. Let's start by building target.
     // First, we can create an all-zeroed bitfield of some size:
+    trace!("Populating target bitfield");
     let mut target_bitfield = {
         let mut bitfield = bitvec![0; next_id];
 
@@ -175,6 +184,7 @@ where
 
     // And now, we can map every preexisting_set to a bitfield...
     // FIXME: This step takes 10 seconds with the large fuzz test which is #[ignore]d below
+    trace!("Populating preexisting_set bitfields");
     let mut preexisting_set_bitfields = filtered_preexisting_sets
         .iter()
         .map(|(key, set)| {
@@ -213,6 +223,14 @@ where
             .filter(|(_, bitfield)| bitfield.count_ones() == max_size)
             .collect::<Vec<_>>();
 
+        trace!(
+            "Max size: {max_size}, bitfields with max size: {:?}",
+            bitfields_with_max_size
+                .iter()
+                .map(|(x, _)| x)
+                .collect::<Vec<_>>()
+        );
+
         // Depending on how many bitfields we have with the maximum size, there's a few different
         // ways we could handle this.
         //
@@ -233,6 +251,7 @@ where
             1 => bitfields_with_max_size[0],
             // Anything else...
             _ => {
+                trace!("Bitfields with max size was > 1, choosing a set");
                 // First of all, if there is any distinct set within our conflicting sets, we should
                 // choose any one of those sets.
                 // A set is "distinct" if the intersection of that set and the union of all conflicting
@@ -263,28 +282,30 @@ where
                     .enumerate()
                     .find(|(i, _)| is_distinct(*i));
 
-                match first_distinct_set {
+                if let Some((i, _)) = first_distinct_set {
                     // If there is a distinct set, use it
-                    Some((i, _)) => bitfields_with_max_size[i],
-
-                    None => {
-                        // Otherwise, we find whichever set has the most elements unique to just
-                        // that set relative to the conflicting sets and choose that one.
-                        // The elements unique to a set A given B and C is just A & ~(B | C).
-                        *bitfields_with_max_size
-                            .iter()
-                            .enumerate()
-                            .max_by_key(|(index, (_, bitfield))| {
-                                // The order here appears flipped because BitVec has an impl for BitVec & &BitVec
-                                // but not &BitVec & BitVec
-                                (!union_of_all_bitfields_except(*index) & *bitfield).count_ones()
-                            })
-                            .expect("bitfields_with_max_size is empty")
-                            .1 // unreachable as the unreachable!() at 0 above would be called
-                    }
+                    trace!("Using the first distinct set");
+                    bitfields_with_max_size[i]
+                } else {
+                    trace!("There is no distinct set, finding the set with the most elements unique relative to the conflicting sets");
+                    // Otherwise, we find whichever set has the most elements unique to just
+                    // that set relative to the conflicting sets and choose that one.
+                    // The elements unique to a set A given B and C is just A & ~(B | C).
+                    *bitfields_with_max_size
+                        .iter()
+                        .enumerate()
+                        .max_by_key(|(index, (_, bitfield))| {
+                            // The order here appears flipped because BitVec has an impl for BitVec & &BitVec
+                            // but not &BitVec & BitVec
+                            (!union_of_all_bitfields_except(*index) & *bitfield).count_ones()
+                        })
+                        .expect("bitfields_with_max_size is empty") // unreachable as the unreachable!() at 0 above would be called
+                        .1
                 }
             }
         };
+
+        debug!("Selected set: {:?}", selected_set.0);
 
         output_keys.insert(***selected_set.0);
 
@@ -298,6 +319,8 @@ where
             .collect::<HashMap<_, _>>();
         preexisting_set_bitfields = new_preexisting_set_bitfields;
     }
+
+    trace!("Unionize sets completed.");
 
     // Outliers = remaining in target
     // Output sets = output_keys

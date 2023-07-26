@@ -1,7 +1,11 @@
 {
     "cSpell.words": [
         "actix",
+        "bitfield",
+        "bitfields",
+        "bitvec",
         "Deque",
+        "Deserializers",
         "dotenv",
         "dotenvy",
         "DRQL",
