@@ -1,4 +1,5 @@
-use anyhow::bail;
+use anyhow::{bail, Context as _};
+use poise::AutocompleteChoice;
 
 use super::super::{drql, Context};
 
@@ -57,8 +58,10 @@ async fn reduce(
 ) -> Result<(), anyhow::Error> {
     ctx.say(
         drql::scanner::scan(msg.as_str())
-            .map(drql::parser::parse_drql)
-            // TODO: Report errors as 'error in chunk X'?
+            .enumerate()
+            .map(|(n, chunk)| {
+                drql::parser::parse_drql(chunk).context(format!("Error parsing chunk {n}"))
+            })
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .reduce(|acc, chunk| crate::drql::ast::Expr::Union(Box::new(acc), Box::new(chunk)))
