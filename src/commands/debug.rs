@@ -38,41 +38,38 @@ async fn scan(
 
 #[instrument(skip_all, fields(query = query))]
 async fn parse_one_autocomplete(_ctx: Context<'_>, query: &str) -> Vec<AutocompleteChoice<String>> {
-    match drql::parser::parse_drql(query) {
-        // When we encounter an error, we want to split it across multiple lines because Discord only
-        // gives us 100 characters for the 'name' field in AutocompleteChoice. We split as follows:
-        // 1. We always split on newlines within the error message.
-        // 2. For a single line of the error message, we split on whitespace.
+    // When we encounter an error, we want to split it across multiple lines because Discord only
+    // gives us 100 characters for the 'name' field in AutocompleteChoice. We split as follows:
+    // 1. We always split on newlines within the error message.
+    // 2. For a single line of the error message, we split on whitespace.
 
-        // TODO: Move this to a function? It's sorta repetitive
-        Err(e) => {
-            debug!("Returning parse error response to autocomplete: {e:#}");
-            format!("Encountered an error while parsing:\n{e:#}")
-                .split('\n')
-                .flat_map(|part| {
-                    crate::util::wrap_string_vec(
-                        &part
-                            .split_whitespace()
-                            .map(std::string::ToString::to_string)
-                            .collect::<Vec<_>>(),
-                        " ",
-                        100,
-                    )
-                    .unwrap()
-                })
-                .map(|option| AutocompleteChoice {
-                    name: option,
-                    value: query.to_string(),
-                })
-                .collect::<Vec<_>>()
-        }
-        Ok(_) => {
-            debug!("Returning \"Parsed successfully\" response to autocomplete");
-            vec![AutocompleteChoice {
-                name: "Parsed successfully. Send command to view AST.".to_string(),
+    // TODO: Move this to a function? It's sorta repetitive for both autocomplete functions
+    if let Err(e) = drql::parser::parse_drql(query) {
+        debug!("Returning parse error response to autocomplete: {e:#}");
+        format!("Encountered an error while parsing:\n{e:#}")
+            .split('\n')
+            .flat_map(|part| {
+                crate::util::wrap_string_vec(
+                    &part
+                        .split_whitespace()
+                        .map(std::string::ToString::to_string)
+                        .collect::<Vec<_>>(),
+                    " ",
+                    100,
+                )
+                .unwrap()
+            })
+            .map(|option| AutocompleteChoice {
+                name: option,
                 value: query.to_string(),
-            }]
-        }
+            })
+            .collect::<Vec<_>>()
+    } else {
+        debug!("Returning \"Parsed successfully\" response to autocomplete");
+        vec![AutocompleteChoice {
+            name: "Parsed successfully. Send command to view AST.".to_string(),
+            value: query.to_string(),
+        }]
     }
 }
 
