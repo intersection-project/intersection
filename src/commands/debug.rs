@@ -10,7 +10,7 @@ pub async fn debug(_ctx: Context<'_>) -> Result<(), anyhow::Error> {
 
 /// Scan input text for DRQL queries
 #[poise::command(slash_command)]
-pub async fn scan(
+async fn scan(
     ctx: Context<'_>,
     #[description = "The message to scan for queries in"] msg: String,
 ) -> Result<(), anyhow::Error> {
@@ -36,7 +36,7 @@ pub async fn scan(
 
 /// Parse a single DRQL query
 #[poise::command(slash_command)]
-pub async fn parse_one(
+async fn parse_one(
     ctx: Context<'_>,
     #[description = "The DRQL query to parse (DO NOT include @{})"] query: String,
 ) -> Result<(), anyhow::Error> {
@@ -51,7 +51,7 @@ pub async fn parse_one(
 
 /// Scan the input, parse each query, and finally reduce into one tree
 #[poise::command(slash_command)]
-pub async fn reduce(
+async fn reduce(
     ctx: Context<'_>,
     #[description = "The message to scan"] msg: String,
 ) -> Result<(), anyhow::Error> {
