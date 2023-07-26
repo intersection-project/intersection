@@ -57,18 +57,22 @@ async fn reduce(
     #[description = "The message to scan"] msg: String,
 ) -> Result<(), anyhow::Error> {
     ctx.say(
-        drql::scanner::scan(msg.as_str())
+        match drql::scanner::scan(msg.as_str())
             .enumerate()
             .map(|(n, chunk)| {
                 drql::parser::parse_drql(chunk).context(format!("Error parsing chunk {n}"))
             })
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .reduce(|acc, chunk| crate::drql::ast::Expr::Union(Box::new(acc), Box::new(chunk)))
-            .map_or_else(
-                || "No chunks found.".to_string(),
-                |ast| format!("Success! Resulting AST:\n\n```{ast:?}```"),
-            ),
+            .collect::<Result<Vec<_>, _>>()
+        {
+            Err(e) => format!("Encountered an error while parsing:\n\n```{e:#}```"),
+            Ok(ast) => ast
+                .into_iter()
+                .reduce(|acc, chunk| crate::drql::ast::Expr::Union(Box::new(acc), Box::new(chunk)))
+                .map_or_else(
+                    || "No chunks found.".to_string(),
+                    |ast| format!("Success! Resulting AST:\n\n```{ast:?}```"),
+                ),
+        },
     )
     .await?;
 
