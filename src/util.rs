@@ -1,3 +1,5 @@
+//! Various utility functions used in Intersection
+
 #![allow(clippy::missing_docs_in_private_items)] // because we don't expect all of these small modules to have docs
 
 mod mention_application_command;

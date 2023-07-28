@@ -1,6 +1,6 @@
-//! Custom extension traits for Intersection
+//! Intersection's extension traits
 //!
-//! This module provides some custom traits on Serenity types.
+//! This module defines extensions on Serenity types.
 
 use std::collections::{HashMap, HashSet};
 

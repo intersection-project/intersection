@@ -1,7 +1,6 @@
-//! DRQL - the Discord Role Query Language
+//! Parsers, interpreters, and other utilities for the Discord Role Query Language (DRQL)
 //!
-//! This module provides a small set of tools for parsing and evaluating
-//! DRQL queries.
+//! This module provides all of the tools you could ever need to work with DRQL.
 
 pub mod ast;
 pub mod interpreter;

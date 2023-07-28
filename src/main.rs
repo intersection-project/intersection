@@ -19,7 +19,12 @@ mod util;
 extern crate lalrpop_util;
 
 lalrpop_mod!(
-    /// Direct access to the DRQL LALRPOP parser. Prefer to use the functions exported by drql::parser instead.
+    /// Direct access to the LALRPOP parser powering DRQL. **Do not use this module.** Use the [`drql::parser`] module instead.
+    ///
+    /// Again. **Don't use this.** The second you import this into your code, you're setting yourself
+    /// up to shoot yourself in the foot. **Just use [`drql::parser`].** There is almost *no* reason
+    /// you would need this module instead, unless you need to handle the underlying errors manually,
+    /// which I doubt.
     #[allow(clippy::all)]
     #[allow(clippy::nursery)]
     #[allow(clippy::pedantic)]
@@ -38,23 +43,35 @@ use tracing_subscriber::prelude::*;
 
 use crate::extensions::CustomGuildImpl;
 
-/// Information collected when compiled, by crate `built`
-pub mod build_info {
+/// Compile-time information collected by the `built` crate
+///
+/// This information is collected at compile-time and is primarily used in the [version] command.
+///
+/// [version]: commands::version
+mod build_info {
     // File is inserted by build.rs
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-/// Global data passed around throughout the bot via the Context instance
+/// Global data passed around to all commands via the [`Context`]
 pub struct Data {
-    /// The framework.shard_manager, used to get the latency of the current shard in the ping command
+    /// The [`ShardManager`] used by this bot client.
+    ///
+    /// This information is used to collect the shard latency in the [ping] command.
+    ///
+    /// [`ShardManager`]: serenity::ShardManager
+    /// [ping]: commands::ping
     shard_manager: Arc<serenity::Mutex<serenity::ShardManager>>,
 }
-/// Type alias for the poise Context given our `Data` type
+/// Type alias for the poise [`Context`] using our custom [`Data`] type and an anyhow [`Error`].
+///
+/// [`Context`]: poise::Context
+/// [`Error`]: anyhow::Error
 type Context<'a> = poise::Context<'a, Data, anyhow::Error>;
 
-/// Confirms the user is aware of the number of mentions that will be created by a query
+/// Prompts the user to confirm they want to execute a query
 ///
-/// Called usually when there is more than 50 in a query.
+/// This is used usually when there are over 50 members_to_ping in a single query.
 ///
 /// Will return Ok(Continue) if the user accepted, Ok(Break) if the user cancelled or timed out,
 /// and Err if there was an error.
@@ -308,7 +325,10 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
     Ok(())
 }
 
-/// Event handler for Intersection
+/// Intersection's primary [`EventHandler`], delegating [`Message`] events to [`handle_drql_query`].
+///
+/// [`EventHandler`]: serenity::EventHandler
+/// [`Message`]: serenity::Message
 struct Handler;
 #[serenity::async_trait]
 impl serenity::EventHandler for Handler {

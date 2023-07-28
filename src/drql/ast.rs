@@ -1,4 +1,4 @@
-//! Abstract Syntax Tree enum for DRQL
+//! DRQL's Abstract Syntax Tree
 
 use std::fmt::{Display, Formatter};
 
