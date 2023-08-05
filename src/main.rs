@@ -32,10 +32,11 @@ use std::{collections::HashSet, env, ops::ControlFlow, sync::Arc};
 
 use anyhow::{bail, Context as _};
 use dotenvy::dotenv;
-use extensions::CustomGuildImpl;
 use poise::serenity_prelude as serenity;
 use tracing::{debug, error, info, instrument, trace, warn};
 use tracing_subscriber::prelude::*;
+
+use crate::extensions::CustomGuildImpl;
 
 /// Information collected when compiled, by crate `built`
 pub mod build_info {

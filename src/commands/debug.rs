@@ -1,5 +1,4 @@
 use anyhow::{bail, Context as _};
-use poise::AutocompleteChoice;
 
 use super::super::{drql, Context};
 
