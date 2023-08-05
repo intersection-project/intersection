@@ -422,7 +422,8 @@ async fn main() -> Result<(), anyhow::Error> {
                     ready.user.name, ready.user.discriminator
                 );
 
-                ctx.set_activity(serenity::Activity::watching("for queries".to_string())).await;
+                ctx.set_activity(serenity::Activity::watching("for queries".to_string()))
+                    .await;
 
                 info!("Registering global application (/) commands...");
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
