@@ -1,6 +1,6 @@
 <div align="center">
 
-# The Intersection Project - Mass pinging, but targeted �
+# The Intersection Project - Mass pinging, but targeted 😏
 
 </div>
 
