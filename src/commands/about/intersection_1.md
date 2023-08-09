@@ -1,4 +1,4 @@
-:wave: **Hello there, I'm Intersection!** Discord mentions, supercharged.
+:wave: **Hello there, I'm Intersection!** Mass pinging, but targeted �
 
 Intersection is a Discord bot that aims to provide modern and advanced tools for Discord server administration, specifically in the area of @-mentions.
 

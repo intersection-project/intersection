@@ -1,6 +1,6 @@
 <div align="center">
 
-# The Intersection Project - Discord mentions, supercharged.
+# The Intersection Project - Mass pinging, but targeted �
 
 </div>
 
