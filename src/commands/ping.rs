@@ -5,6 +5,7 @@ use super::super::Context;
 
 /// Check if Intersection is online
 #[poise::command(slash_command)]
+#[allow(clippy::significant_drop_tightening)] // faulty rule in this case i think -- needs investigation
 pub async fn ping(ctx: Context<'_>) -> Result<(), anyhow::Error> {
     let m = ctx.say("Ping?").await?;
 

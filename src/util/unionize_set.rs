@@ -191,7 +191,7 @@ where
             (key, {
                 let mut bitfield = bitvec![0; next_id];
 
-                for value in set.iter() {
+                for value in *set {
                     let index = value_to_index
                         .get(value)
                         .expect("value not in value_to_index");
