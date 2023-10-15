@@ -268,7 +268,7 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
 
     if members_to_ping.len() > 50 {
         debug!("need to wait for user to confirm large mention");
-        if let ControlFlow::Break(_) =
+        if let ControlFlow::Break(()) =
             confirm_mention_count(ctx, msg, &stringified_mentions, &members_to_ping).await?
         {
             debug!("User cancelled or timed out");
@@ -331,6 +331,7 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
 /// [`Message`]: serenity::Message
 struct Handler;
 #[serenity::async_trait]
+#[allow(clippy::ignored_unit_patterns)] // bugged
 impl serenity::EventHandler for Handler {
     #[instrument(skip_all, fields(author = msg.author.id.0, content = msg.content))]
     async fn message(&self, ctx: serenity::Context, msg: serenity::Message) {
@@ -347,7 +348,7 @@ impl serenity::EventHandler for Handler {
                 .await
                 .context("Error handling DRQL query")
             {
-                Ok(_) => debug!("Finished handling queries."),
+                Ok(()) => debug!("Finished handling queries."),
 
                 Err(query_err) => {
                     // THIS IS NOT OUR FAULT -- This most likely means the USER made a mistake
