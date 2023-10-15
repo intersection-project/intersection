@@ -269,7 +269,8 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
     if members_to_ping.len() > 50 {
         debug!("need to wait for user to confirm large mention");
         if confirm_mention_count(ctx, msg, &stringified_mentions, &members_to_ping).await?
-            == ControlFlow::Break(()) {
+            == ControlFlow::Break(())
+        {
             debug!("User cancelled or timed out");
             // The user declined or the operation timed out. The message has already been edited for us.
             return Ok(());
