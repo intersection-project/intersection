@@ -4,7 +4,34 @@
 
 </div>
 
-Are you looking to invite the bot? This information is for developers, not for users! [Invite the bot here.](https://discord.com/api/oauth2/authorize?client_id=1080306848021872710&permissions=378226068544&scope=bot%20applications.commands)
+<div align="center">
+
+# Rest in peace, Intersection.
+
+</div>
+
+Dear Intersection Community,
+
+I really do not like to do this. Killing off your passion projects always hurts. But all great things must come to an end, and Intersection's time has come.
+
+As of today—November 11, 2023—I will be officially archiving the Intersection repository and shutting down the Intersection hosted instance.
+
+I loved working on Intersection and pushing the limits of what Discord could do, however I believe Intersection was a little too experimental to be possible on Discord. It did not see many real-world use cases except for finding users without a certain role, and was extremely complicated for even that purpose. It has also been rumored that Discord may supress notifications in messages that mention over around 10 users, which makes Intersection's entire purpose obsolete without extreme refactors (we'd need to create a role for solely the members we're trying to notify).
+
+Due to a lack of real-world use cases and also a lack of motivation to work on the project, I am officially discontinuing it. If there is anyone qualified who would like to take it over, please reach out. I'd love to see what we can do. I may at some point in the future decide to revive the project—all of it's infrastructure still exists—but for now it seems like a waste of resources.
+
+Intersection, you will be missed.
+
+Thank you all for helping make this possible,
+**LogN**
+
+<div align="center">
+
+# About
+
+</div>
+
+Are you looking to invite the bot? Sadly, as noted above, we no longer host an instance of Intersection. Please try to find someone else who is willing to host the bot.
 
 Intersection is a Discord bot and software suite that empowers Discord's @-mentions with advanced
 concepts with their roots in set theory, such as taking the **intersection** of two roles.
