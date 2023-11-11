@@ -22,7 +22,7 @@ Due to a lack of real-world use cases and also a lack of motivation to work on t
 
 Intersection, you will be missed.
 
-Thank you all for helping make this possible,
+Thank you all for helping make this possible.  
 **LogN**
 
 <div align="center">
