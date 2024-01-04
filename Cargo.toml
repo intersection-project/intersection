@@ -24,7 +24,7 @@ logos = "0.13.0"
 poise = "0.5.6"
 regex = "1.10.2"
 tap = "1.0.1"
-tokio = { version = "1.33.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.35.1", features = ["macros", "rt-multi-thread"] }
 tracing = { version = "0.1.40", features = ["release_max_level_info"] }
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
