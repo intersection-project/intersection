@@ -69,7 +69,11 @@ pub enum Tok {
     /// From issue #25, `@everyone` and `@here` (the exact strings, which are the mentions)
     /// are treated as `everyone` and `here`.
     #[regex(r#""([^"\\]|\\.)*""#, |lex| lex.slice()[1..(lex.slice().len()-1)].to_string())]
+    #[regex(r#"“([^"\\]|\\.)*”"#, |lex| lex.slice()[3..(lex.slice().len()-3)].to_string())]
     #[regex(r#""([^"\\]|\\.)*"#, |lex| {
+        Err(LexicalError::UnterminatedStringLiteral(lex.span().start))
+    })]
+    #[regex(r#"“([^"\\]|\\.)*"#, |lex| {
         Err(LexicalError::UnterminatedStringLiteral(lex.span().start))
     })]
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
