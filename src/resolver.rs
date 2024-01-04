@@ -138,8 +138,10 @@ impl<'a> InterpreterResolver<anyhow::Error> for Resolver<'a> {
 
             assert!(possible_members.len() + possible_roles.len() == 1);
 
-            let member = possible_members.get(0);
-            let role = possible_roles.get(0).map(|(_, x)| x);
+            // .first() more like .only() (len asserted == 1) and only one will be Some
+            // TODO: use custom enum or perhaps Either
+            let member = possible_members.first();
+            let role = possible_roles.first().map(|(_, x)| x);
 
             match (member, role) {
                 (Some(member), None) => {

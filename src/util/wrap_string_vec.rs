@@ -73,10 +73,7 @@ mod tests {
 
     #[test]
     fn wrap_string_vec_has_overflow() {
-        assert!(matches!(
-            wrap_string_vec(&vec!["ABCDEF".to_string()], " ", 5),
-            Err(_)
-        ));
+        assert!(wrap_string_vec(&vec!["ABCDEF".to_string()], " ", 5).is_err());
     }
 
     #[test]
