@@ -263,7 +263,7 @@ where
                         .iter()
                         .enumerate()
                         .filter(|(i, _)| *i != index)
-                        .map(|(_, (_, v))| v)
+                        .map(|(_, (_, value))| value)
                         .fold(bitvec![0; next_id], |acc, bitfield| acc | *bitfield)
                 };
 
@@ -329,7 +329,12 @@ where
         // Key to &Key without returning data owned by this fn
         sets: output_keys
             .into_iter()
-            .map(|key| preexisting_sets.get_key_value(&key).unwrap().0)
+            .map(|key| {
+                preexisting_sets
+                    .get_key_value(&key)
+                    .expect("key should be a valid preexisting set")
+                    .0
+            })
             .collect(),
         // Map each number in the new target bitfield back to a reference to its value from target.
         // This is first done by converting our BitVec to a an iterator over all of the indices,

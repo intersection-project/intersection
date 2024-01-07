@@ -1,12 +1,53 @@
 #![doc = include_str!("../README.md")]
+#![allow(unknown_lints)] // in case you use non-nightly clippy
 #![warn(
     clippy::cargo,
     clippy::nursery,
     clippy::pedantic,
     clippy::missing_docs_in_private_items,
-    missing_docs
+    missing_docs,
+    clippy::absolute_paths,
+    clippy::as_conversions,
+    clippy::dbg_macro,
+    clippy::decimal_literal_representation,
+    clippy::deref_by_slicing,
+    clippy::disallowed_script_idents,
+    clippy::else_if_without_else,
+    clippy::empty_structs_with_brackets,
+    clippy::format_push_string,
+    clippy::if_then_some_else_none,
+    clippy::let_underscore_must_use,
+    clippy::min_ident_chars,
+    clippy::mixed_read_write_in_expression,
+    clippy::multiple_inherent_impl,
+    clippy::multiple_unsafe_ops_per_block,
+    clippy::non_ascii_literal,
+    clippy::redundant_type_annotations,
+    clippy::rest_pat_in_fully_bound_structs,
+    clippy::same_name_method,
+    clippy::semicolon_inside_block,
+    clippy::unseparated_literal_suffix,
+    clippy::string_to_string,
+    clippy::todo,
+    clippy::undocumented_unsafe_blocks,
+    clippy::unimplemented,
+    clippy::unneeded_field_pattern,
+    clippy::wildcard_enum_match_arm,
+    let_underscore_drop,
+    macro_use_extern_crate,
+    missing_debug_implementations,
+    non_exhaustive_omitted_patterns,
+    unsafe_op_in_unsafe_fn,
+    unused_crate_dependencies,
+    variant_size_differences,
+    unused_qualifications,
+    clippy::unwrap_used,
+
+    // To force us to use tracing log methods
+    clippy::print_stderr,
+    clippy::print_stdout
 )]
-#![allow(clippy::multiple_crate_versions, clippy::unused_async)]
+#![allow(clippy::multiple_crate_versions, clippy::cargo_common_metadata)]
 
 mod commands;
 mod drql;
@@ -15,8 +56,7 @@ mod models;
 mod resolver;
 mod util;
 
-#[macro_use]
-extern crate lalrpop_util;
+use lalrpop_util::lalrpop_mod;
 
 lalrpop_mod!(
     /// Direct access to the LALRPOP parser powering DRQL. **Do not use this module.** Use the [`drql::parser`] module instead.
@@ -25,11 +65,15 @@ lalrpop_mod!(
     /// up to shoot yourself in the foot. **Just use [`drql::parser`].** There is almost *no* reason
     /// you would need this module instead, unless you need to handle the underlying errors manually,
     /// which I doubt.
-    #[allow(clippy::all)]
-    #[allow(clippy::nursery)]
-    #[allow(clippy::pedantic)]
-    #[allow(missing_docs)]
-    #[allow(clippy::missing_docs_in_private_items)]
+    #[allow(
+        clippy::all,
+        clippy::nursery,
+        clippy::pedantic,
+        missing_docs,
+        clippy::missing_docs_in_private_items,
+        clippy::restriction,
+        unused_qualifications
+    )]
     parser
 );
 
@@ -41,7 +85,7 @@ use poise::serenity_prelude as serenity;
 use tracing::{debug, error, info, instrument, trace, warn};
 use tracing_subscriber::prelude::*;
 
-use crate::extensions::CustomGuildImpl;
+use crate::{drql::ast::Expr, extensions::CustomGuildImpl};
 
 /// Compile-time information collected by the `built` crate
 ///
@@ -54,6 +98,7 @@ mod build_info {
 }
 
 /// Global data passed around to all commands via the [`Context`]
+#[derive(Debug)]
 pub struct Data {
     /// The [`ShardManager`] used by this bot client.
     ///
@@ -90,51 +135,54 @@ async fn confirm_mention_count(
 
     trace!("sending confirmation message");
 
-    let mut m = channel
-        .send_message(ctx, |m| {
-            m.content(format!(
-                concat!(
-                    "**Hold up!** By running this query, you are about to",
-                    " mention {} people.{} Are you sure?"
-                ),
-                members_to_ping.len(),
-                {
-                    let len = util::wrap_string_vec(stringified_mentions, " ", 2000)
-                        .unwrap() // TODO: Remove unwrap?
-                        .len();
-                    if len > 2 {
-                        format!(" This will require the sending of {len} messages.")
-                    } else {
-                        String::new()
+    let mut confirmation_message = channel
+        .send_message(ctx, |msg_builder| {
+            msg_builder
+                .content(format!(
+                    concat!(
+                        "**Hold up!** By running this query, you are about to",
+                        " mention {} people.{} Are you sure?"
+                    ),
+                    members_to_ping.len(),
+                    {
+                        let len = util::wrap_string_vec(stringified_mentions, " ", 2000)
+                            .expect("a mention should always fit in 2000 chars")
+                            .len();
+                        if len > 2 {
+                            format!(" This will require the sending of {len} messages.")
+                        } else {
+                            String::new()
+                        }
                     }
-                }
-            ))
-            .reference_message(msg) // basically makes it a reply
-            .components(|components| {
-                components.create_action_row(|action_row| {
-                    action_row
-                        .create_button(|button| {
-                            button
-                                .custom_id("large_ping_confirm_no")
-                                .emoji(serenity::ReactionType::Unicode("❌".to_string()))
-                                .label("Cancel")
-                                .style(serenity::ButtonStyle::Secondary)
-                        })
-                        .create_button(|button| {
-                            button
-                                .custom_id("large_ping_confirm_yes")
-                                .emoji(serenity::ReactionType::Unicode("✅".to_string()))
-                                .label("Yes")
-                                .style(serenity::ButtonStyle::Primary)
-                        })
+                ))
+                .reference_message(msg) // basically makes it a reply
+                .components(|components| {
+                    components.create_action_row(|action_row| {
+                        action_row
+                            .create_button(|button| {
+                                button
+                                    .custom_id("large_ping_confirm_no")
+                                    // X emoji
+                                    .emoji(serenity::ReactionType::Unicode("\u{274c}".to_string()))
+                                    .label("Cancel")
+                                    .style(serenity::ButtonStyle::Secondary)
+                            })
+                            .create_button(|button| {
+                                button
+                                    .custom_id("large_ping_confirm_yes")
+                                    // check mark emoji
+                                    .emoji(serenity::ReactionType::Unicode("\u{2705}".to_string()))
+                                    .label("Yes")
+                                    .style(serenity::ButtonStyle::Primary)
+                            })
+                    })
                 })
-            })
         })
         .await?;
 
     trace!("waiting for confirmation");
 
-    let Some(interaction) = m
+    let Some(interaction) = confirmation_message
         .await_component_interaction(ctx)
         .collect_limit(1)
         .author_id(msg.author.id)
@@ -142,34 +190,46 @@ async fn confirm_mention_count(
         .await
     else {
         debug!("timed out waiting for confirmation");
-        m.edit(ctx, |m| {
-            m.content("Timed out waiting for confirmation.")
-                .components(|components| components)
-        })
-        .await?;
+        confirmation_message
+            .edit(ctx, |edit_handle| {
+                edit_handle
+                    .content("Timed out waiting for confirmation.")
+                    .components(|components| components)
+            })
+            .await?;
         return Ok(ControlFlow::Break(()));
     };
 
-    if interaction.data.custom_id == "large_ping_confirm_no" {
-        debug!("User cancelled operation");
-        m.edit(ctx, |m| {
-            m.content("Cancelled.").components(|components| components)
-        })
-        .await?;
+    match interaction.data.custom_id.as_str() {
+        "large_ping_confirm_no" => {
+            debug!("User cancelled operation");
+            confirmation_message
+                .edit(ctx, |edit_handle| {
+                    edit_handle
+                        .content("Cancelled.")
+                        .components(|components| components)
+                })
+                .await?;
 
-        return Ok(ControlFlow::Break(()));
-    } else if interaction.data.custom_id == "large_ping_confirm_yes" {
-        debug!("User confirmed operation");
-        m.edit(ctx, |m| {
-            m.content("Confirmed.").components(|components| components)
-        })
-        .await?;
+            return Ok(ControlFlow::Break(()));
+        }
+        "large_ping_confirm_yes" => {
+            debug!("User confirmed operation");
+            confirmation_message
+                .edit(ctx, |edit_handle| {
+                    edit_handle
+                        .content("Confirmed.")
+                        .components(|components| components)
+                })
+                .await?;
 
-        // continue normally!
-        return Ok(ControlFlow::Continue(()));
+            // continue normally!
+            return Ok(ControlFlow::Continue(()));
+        }
+        _ => {
+            bail!("Discord sent us an invalid interaction customId!");
+        }
     }
-
-    bail!("unreachable");
 }
 
 /// Handle a DRQL query from a message, sending the response message(s) to the channel.
@@ -189,7 +249,7 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
         })
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
-        .reduce(|acc, chunk| crate::drql::ast::Expr::Union(Box::new(acc), Box::new(chunk)))
+        .reduce(|acc, chunk| Expr::Union(Box::new(acc), Box::new(chunk)))
         .context("There is no DRQL query in your message to handle.")?; // This should never happen, as we already checked that there was at least one chunk in the input
 
     debug!("Fully parsed and reduced AST: {ast:?}");
@@ -395,6 +455,7 @@ impl serenity::EventHandler for Handler {
 async fn main() -> Result<(), anyhow::Error> {
     // We ignore the error because environment variables may be passed
     // in directly, and .env might not exist (e.g. in Docker with --env-file)
+    #[allow(clippy::let_underscore_must_use, let_underscore_drop)]
     let _: Result<_, _> = dotenv();
 
     let filter = tracing_subscriber::EnvFilter::builder().parse(

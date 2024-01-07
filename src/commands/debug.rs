@@ -1,5 +1,7 @@
 use anyhow::{bail, Context as _};
 
+use crate::drql::ast::Expr;
+
 use super::super::{drql, Context};
 
 /// Debug DRQL queries or the DRQL facilities itself
@@ -41,7 +43,7 @@ async fn parse_one(
     #[description = "The DRQL query to parse (DO NOT include @{})"] query: String,
 ) -> Result<(), anyhow::Error> {
     ctx.say(match drql::parser::parse_drql(query.as_str()) {
-        Err(e) => format!("Encountered an error while parsing:\n\n```{e:?}```"),
+        Err(err) => format!("Encountered an error while parsing:\n\n```{err:?}```"),
         Ok(ast) => format!("Successfully parsed:\n\n```{ast:?}```"),
     })
     .await?;
@@ -63,10 +65,10 @@ async fn reduce(
             })
             .collect::<Result<Vec<_>, _>>()
         {
-            Err(e) => format!("Encountered an error while parsing:\n\n```{e:#}```"),
+            Err(err) => format!("Encountered an error while parsing:\n\n```{err:#}```"),
             Ok(ast) => ast
                 .into_iter()
-                .reduce(|acc, chunk| crate::drql::ast::Expr::Union(Box::new(acc), Box::new(chunk)))
+                .reduce(|acc, chunk| Expr::Union(Box::new(acc), Box::new(chunk)))
                 .map_or_else(
                     || "No chunks found.".to_string(),
                     |ast| format!("Success! Resulting AST:\n\n```{ast:?}```"),

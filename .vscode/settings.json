@@ -1,19 +1,23 @@
 {
     "cSpell.words": [
         "actix",
+        "appender",
         "bitfield",
         "bitfields",
         "bitvec",
+        "builtins",
         "Deque",
         "Deserializers",
         "dotenv",
         "dotenvy",
         "DRQL",
+        "idents",
         "Insertable",
         "lalrpop",
         "rustc",
         "rustup",
-        "sqlx"
+        "sqlx",
+        "unseparated"
     ],
     "rust-analyzer.checkOnSave.command": "clippy"
 }

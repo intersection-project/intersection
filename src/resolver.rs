@@ -46,13 +46,13 @@ impl<'a> InterpreterResolver<anyhow::Error> for Resolver<'a> {
                 "everyone" => self.guild.get_everyone(),
                 "here" => self.guild.get_here(),
                 _ => unreachable!(),
-            })
+            }
             .tap(|x| {
                 debug!(
                     "Resolved everyone/here literal to {:?}",
-                    &x.as_ref().unwrap().iter().map(|x| x.0).collect::<Vec<_>>()
+                    &x.iter().map(|x| x.0).collect::<Vec<_>>()
                 );
-            })
+            }))
         } else {
             trace!("Finding possible members/roles for string literal");
 
@@ -193,9 +193,8 @@ impl<'a> InterpreterResolver<anyhow::Error> for Resolver<'a> {
 
             debug!(
                 "Possible member: {:?}",
-                possible_member.as_ref().map(|m| m.user.id.0)
+                possible_member.as_ref().map(|member| member.user.id.0)
             );
-            debug!("Possible role: {:?}", possible_role.map(|r| r.id.0));
 
             match (possible_member, possible_role) {
                 (Ok(_), Some(_)) => {

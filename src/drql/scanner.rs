@@ -10,10 +10,11 @@ use regex::Regex;
 /// Returns an Iterator over provided text, returning every value within `@{ ... }`.
 pub fn scan(input: &str) -> impl Iterator<Item = &'_ str> {
     lazy_static! {
-        static ref RE: Regex = Regex::new(r"@\{(.+?)\}").unwrap();
+        static ref RE: Regex =
+            Regex::new(r"@\{(.+?)\}").expect("regexp should compile successfully");
     }
     RE.find_iter(input)
-        .map(|m| &m.as_str()[2..(m.as_str().len() - 1)])
+        .map(|matched| &matched.as_str()[2..(matched.as_str().len() - 1)])
 }
 
 #[cfg(test)]

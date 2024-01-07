@@ -52,7 +52,7 @@ jobs:
             - name: Set up Rust
               uses: actions-rs/toolchain@v1
               with:
-                  toolchain: stable
+                  toolchain: nightly
                   override: true
                   components: clippy
 
@@ -62,7 +62,7 @@ jobs:
             - name: Use dependency cache
               uses: Swatinem/rust-cache@v2
 
-            - name: cargo clippy
+            - name: cargo +nightly clippy
               uses: actions-rs/cargo@v1
               with:
                   command: clippy

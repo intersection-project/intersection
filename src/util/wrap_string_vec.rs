@@ -42,7 +42,7 @@ mod tests {
             " ",
             7,
         )
-        .unwrap();
+        .expect("wrapping should succeed");
         assert_eq!(
             result,
             vec![
@@ -53,11 +53,13 @@ mod tests {
         );
 
         let result = wrap_string_vec(
-            &('A'..='Z').map(|l| l.to_string()).collect::<Vec<_>>(),
+            &('A'..='Z')
+                .map(|letter| letter.to_string())
+                .collect::<Vec<_>>(),
             " ",
             10,
         )
-        .unwrap();
+        .expect("wrapping should succeed");
         assert_eq!(
             result,
             vec![
@@ -78,7 +80,7 @@ mod tests {
 
     #[test]
     fn wrap_string_vec_empty_input() {
-        let result = wrap_string_vec(&Vec::new(), " ", 10).unwrap();
+        let result = wrap_string_vec(&Vec::new(), " ", 10).expect("wrapping should succeed");
         assert_eq!(result, Vec::<String>::new());
     }
 }

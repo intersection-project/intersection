@@ -37,7 +37,7 @@ impl std::fmt::Display for LexicalError {
             Self::UnterminatedStringLiteral(index) => {
                 write!(f, "Unterminated string literal at index {index}")
             }
-            Self::ParseIntError(e) => write!(f, "ParseIntError: {e}"),
+            Self::ParseIntError(err) => write!(f, "ParseIntError: {err}"),
         }
     }
 }
@@ -87,12 +87,12 @@ pub enum Tok {
 
     /// User mentions
     #[regex(r"<@!?([0-9]+)>", |lex| {
-        let s = lex.slice();
+        let slice = lex.slice();
 
-        if s[2..3] == *"!" {
-            s[3..(s.len()-1)].to_string()
+        if slice[2..3] == *"!" {
+            slice[3..(slice.len()-1)].to_string()
         } else {
-            s[2..(s.len()-1)].to_string()
+            slice[2..(slice.len()-1)].to_string()
         }
     })]
     UserMention(String),
@@ -111,10 +111,10 @@ impl std::fmt::Display for Tok {
             Self::Ampersand => write!(f, "&"),
             Self::LeftParen => write!(f, "("),
             Self::RightParen => write!(f, ")"),
-            Self::StringLiteral(s) => write!(f, "\"{s}\""),
-            Self::IDLiteral(s) => write!(f, "{s}"),
-            Self::UserMention(s) => write!(f, "<@{s}>"),
-            Self::RoleMention(s) => write!(f, "<@&{s}>"),
+            Self::StringLiteral(contents) => write!(f, "\"{contents}\""),
+            Self::IDLiteral(id) => write!(f, "{id}"),
+            Self::UserMention(id) => write!(f, "<@{id}>"),
+            Self::RoleMention(id) => write!(f, "<@&{id}>"),
         }
     }
 }
@@ -144,10 +144,13 @@ impl<'input> Iterator for DrqlLexer<'input> {
         let slice = self.lex.slice().to_string();
         match token {
             Err(LexicalError::NoMatchingRule) => {
-                let char = slice.chars().next().unwrap();
+                let char = slice
+                    .chars()
+                    .next()
+                    .expect("there should be a character that didn't match");
                 Some(Err(LexicalError::UnknownToken((span.start, char))))
             }
-            Err(e) => Some(Err(e)),
+            Err(err) => Some(Err(err)),
             Ok(token) => Some(Ok((span.start, token, span.end))),
         }
     }
@@ -160,7 +163,9 @@ mod tests {
     #[test]
     fn lexer_works_as_expected() {
         let lexer = DrqlLexer::new("t e s t");
-        let tokens: Vec<_> = lexer.map(|x| x.unwrap().1).collect();
+        let tokens: Vec<_> = lexer
+            .map(|x| x.expect("lexing should not have failed").1)
+            .collect();
         assert_eq!(
             tokens,
             vec![
@@ -204,7 +209,9 @@ mod tests {
     #[test]
     fn lexer_token_slices() {
         let lexer = DrqlLexer::new("abc + \"def\" + <@123> + 456 + <@&789> + <@!111>");
-        let tokens: Vec<_> = lexer.map(|x| x.unwrap().1).collect();
+        let tokens: Vec<_> = lexer
+            .map(|x| x.expect("lexing should not have failed").1)
+            .collect();
         assert_eq!(
             tokens,
             vec![

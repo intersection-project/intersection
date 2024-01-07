@@ -7,13 +7,13 @@ use super::super::Context;
 #[poise::command(slash_command)]
 #[allow(clippy::significant_drop_tightening)] // faulty rule in this case i think -- needs investigation
 pub async fn ping(ctx: Context<'_>) -> Result<(), anyhow::Error> {
-    let m = ctx.say("Ping?").await?;
+    let response = ctx.say("Ping?").await?;
 
     let poise::Context::Application(new_ctx) = ctx else {
         panic!();
     };
 
-    let diff_ms = m.message().await?.timestamp.timestamp_millis()
+    let diff_ms = response.message().await?.timestamp.timestamp_millis()
         - new_ctx.interaction.id().created_at().timestamp_millis();
 
     // See https://github.com/serenity-rs/serenity/blob/6e2e70766e1afbce9cd1d4b43e3c6ee3b474f0bf/examples/e05_command_framework/src/main.rs#L468
@@ -26,14 +26,18 @@ pub async fn ping(ctx: Context<'_>) -> Result<(), anyhow::Error> {
             .latency
     };
 
-    m.edit(ctx, |r| {
-        r.content(format!(
-            "Pong :ping_pong:! (Round trip: {}ms. Heartbeat: {}.)",
-            diff_ms,
-            shard_latency.map_or_else(|| "unknown".to_string(), |l| format!("{}ms", l.as_millis()))
-        ))
-    })
-    .await?;
+    response
+        .edit(ctx, |edit_handle| {
+            edit_handle.content(format!(
+                "Pong :ping_pong:! (Round trip: {}ms. Heartbeat: {}.)",
+                diff_ms,
+                shard_latency.map_or_else(
+                    || "unknown".to_string(),
+                    |latency| format!("{}ms", latency.as_millis())
+                )
+            ))
+        })
+        .await?;
 
     Ok(())
 }
