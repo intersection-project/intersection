@@ -31,15 +31,18 @@ pub enum Expr {
 impl Display for Expr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Union(l, r) => write!(f, "({l} | {r})"),
-            Self::Intersection(l, r) => write!(f, "({l} & {r})"),
-            Self::Difference(l, r) => write!(f, "({l} - {r})"),
+            Self::Union(lhs, rhs) => write!(f, "({lhs} | {rhs})"),
+            Self::Intersection(lhs, rhs) => write!(f, "({lhs} & {rhs})"),
+            Self::Difference(lhs, rhs) => write!(f, "({lhs} - {rhs})"),
 
-            Self::StringLiteral(l) => {
-                if l.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-                    write!(f, "{l}")
+            Self::StringLiteral(contents) => {
+                if contents
+                    .chars()
+                    .all(|char| char.is_ascii_alphanumeric() || char == '_')
+                {
+                    write!(f, "{contents}")
                 } else {
-                    write!(f, "\"{l}\"")
+                    write!(f, "\"{contents}\"")
                 }
             }
             Self::UnknownID(id) => write!(f, "{id}"),

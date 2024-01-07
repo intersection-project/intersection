@@ -33,23 +33,23 @@ pub async fn interpret<E: Send>(
     resolver: &mut (impl InterpreterResolver<E> + Send),
 ) -> Result<HashSet<UserId>, E> {
     Ok(match node {
-        Expr::Difference(l, r) => interpret(*l, resolver)
+        Expr::Difference(lhs, rhs) => interpret(*lhs, resolver)
             .await?
-            .difference(&interpret(*r, resolver).await?)
+            .difference(&interpret(*rhs, resolver).await?)
             .copied()
             .collect::<HashSet<_>>(),
-        Expr::Intersection(l, r) => interpret(*l, resolver)
+        Expr::Intersection(lhs, rhs) => interpret(*lhs, resolver)
             .await?
-            .intersection(&interpret(*r, resolver).await?)
+            .intersection(&interpret(*rhs, resolver).await?)
             .copied()
             .collect::<HashSet<_>>(),
-        Expr::Union(l, r) => interpret(*l, resolver)
+        Expr::Union(lhs, rhs) => interpret(*lhs, resolver)
             .await?
-            .union(&interpret(*r, resolver).await?)
+            .union(&interpret(*rhs, resolver).await?)
             .copied()
             .collect::<HashSet<_>>(),
 
-        Expr::StringLiteral(l) => resolver.resolve_string_literal(l).await?,
+        Expr::StringLiteral(contents) => resolver.resolve_string_literal(contents).await?,
         Expr::UnknownID(id) => resolver.resolve_unknown_id(id).await?,
         Expr::UserID(id) => resolver.resolve_user_id(id).await?,
         Expr::RoleID(id) => resolver.resolve_role_id(id).await?,
@@ -66,14 +66,14 @@ mod tests {
         use super::*;
 
         // In this case, the resolver uses some basic predefined values.
-        struct Resolver {}
+        struct Resolver;
         #[async_trait]
         impl InterpreterResolver<anyhow::Error> for Resolver {
             async fn resolve_string_literal(
                 &mut self,
-                s: String,
+                contents: String,
             ) -> Result<HashSet<UserId>, anyhow::Error> {
-                if s == "test_ok_case" {
+                if contents == "test_ok_case" {
                     Ok(HashSet::from([UserId(1)]))
                 } else {
                     Err(anyhow!("error case 1"))
@@ -131,15 +131,14 @@ mod tests {
                     &mut Resolver {}
                 )
                 .await
-                .unwrap(),
+                .expect("interpret should not fail"),
                 HashSet::from([UserId(1), UserId(2), UserId(3), UserId(4)])
             );
         }
 
         #[tokio::test]
-        #[should_panic = "called `Result::unwrap()` on an `Err` value: error case 1"]
         async fn errors_bubble() {
-            let _ = interpret(
+            assert!(interpret(
                 Expr::Union(
                     Box::new(Expr::StringLiteral("7".to_string())),
                     Box::new(Expr::StringLiteral("test_ok_case".to_string())),
@@ -147,7 +146,7 @@ mod tests {
                 &mut Resolver {},
             )
             .await
-            .unwrap();
+            .is_err());
         }
     }
 }
