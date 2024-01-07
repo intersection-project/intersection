@@ -1,8 +1,7 @@
 use anyhow::{bail, Context as _};
 
-use crate::drql::ast::Expr;
-
 use super::super::{drql, Context};
+use crate::drql::ast::Expr;
 
 /// Debug DRQL queries or the DRQL facilities itself
 #[poise::command(slash_command, subcommands("scan", "parse_one", "reduce"))]

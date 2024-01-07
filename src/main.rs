@@ -47,7 +47,11 @@
     clippy::print_stderr,
     clippy::print_stdout
 )]
-#![allow(clippy::multiple_crate_versions, clippy::cargo_common_metadata)]
+#![allow(
+    clippy::multiple_crate_versions,
+    clippy::cargo_common_metadata,
+    clippy::no_effect_underscore_binding
+)]
 
 mod commands;
 mod drql;
@@ -81,7 +85,10 @@ use std::{collections::HashSet, env, ops::ControlFlow, sync::Arc};
 
 use anyhow::{bail, Context as _};
 use dotenvy::dotenv;
-use poise::serenity_prelude as serenity;
+use poise::{
+    serenity_prelude::{self as serenity, Guild, GuildChannel, Member, UserId},
+    FrameworkError,
+};
 use tracing::{debug, error, info, instrument, trace, warn};
 use tracing_subscriber::prelude::*;
 
@@ -125,7 +132,7 @@ async fn confirm_mention_count(
     ctx: &serenity::Context,
     msg: &serenity::Message,
     stringified_mentions: &Vec<String>,
-    members_to_ping: &HashSet<serenity::UserId>,
+    members_to_ping: &HashSet<UserId>,
 ) -> anyhow::Result<ControlFlow<(), ()>> {
     let serenity::Channel::Guild(channel) = msg.channel(ctx).await? else {
         // DMs would have been prevented already.
@@ -232,17 +239,20 @@ async fn confirm_mention_count(
     }
 }
 
-/// Handle a DRQL query from a message, sending the response message(s) to the channel.
+/// Process a DRQL query from a single slice of Query chunk strings
+/// and return the resulting members_to_ping
 #[instrument(skip_all)]
-async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> anyhow::Result<()> {
-    if msg.guild(ctx).is_none() {
-        debug!("Ignoring DRQL query sent in DMs.");
-        bail!("DRQL queries are not available in DMs.");
-    }
+pub async fn parse_and_evaluate_query(
+    ctx: &serenity::Context,
+    chunks: &[&str],
+    guild: &Guild,
+    member: &Member,
+    channel: &GuildChannel,
+) -> anyhow::Result<HashSet<UserId>> {
+    trace!("Parsing each chunk...");
 
-    trace!("Parsing queries in message...");
-
-    let ast = drql::scanner::scan(msg.content.as_str())
+    let ast = chunks
+        .iter()
         .enumerate()
         .map(|(n, chunk)| {
             drql::parser::parse_drql(chunk).context(format!("Error parsing chunk {n}"))
@@ -254,6 +264,35 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
 
     debug!("Fully parsed and reduced AST: {ast:?}");
 
+    trace!("Running DRQL interpreter on AST");
+    let members_to_ping = drql::interpreter::interpret(
+        ast,
+        &mut resolver::Resolver {
+            guild,
+            member,
+            ctx,
+            channel,
+        },
+    )
+    .await
+    .context("Error calculating result")?;
+
+    debug!(
+        "Evaluated result: {:?}",
+        members_to_ping.iter().map(|id| id.0).collect::<Vec<_>>()
+    );
+
+    Ok(members_to_ping)
+}
+
+/// Handle a DRQL query from a message, sending the response message(s) to the channel.
+#[instrument(skip_all)]
+async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> anyhow::Result<()> {
+    if msg.guild(ctx).is_none() {
+        debug!("Ignoring DRQL query sent in DMs.");
+        bail!("DRQL queries are not available in DMs.");
+    }
+
     trace!("Fetching guild, channel, and member information");
     let guild = msg.guild(ctx).context("Unable to resolve guild")?;
     let member = msg.member(ctx).await?;
@@ -263,23 +302,15 @@ async fn handle_drql_query(ctx: &serenity::Context, msg: &serenity::Message) -> 
         bail!("unreachable");
     };
 
-    trace!("Running DRQL interpreter on AST");
-    let members_to_ping = drql::interpreter::interpret(
-        ast,
-        &mut resolver::Resolver {
-            guild: &guild,
-            member: &member,
-            ctx,
-            channel: &channel,
-        },
+    trace!("Running DRQL parser/interpreter on message");
+    let members_to_ping = parse_and_evaluate_query(
+        ctx,
+        &drql::scanner::scan(msg.content.as_str()).collect::<Vec<_>>(),
+        &guild,
+        &member,
+        &channel,
     )
-    .await
-    .context("Error calculating result")?;
-
-    debug!(
-        "We need to mention these members: {:?}",
-        members_to_ping.iter().map(|id| id.0).collect::<Vec<_>>()
-    );
+    .await?;
 
     // A hashmap of every role in the guild and its members.
     let roles_and_their_members = guild.all_roles_and_members(ctx)?;
@@ -490,7 +521,18 @@ async fn main() -> Result<(), anyhow::Error> {
                 commands::about(),
                 commands::debug(),
                 commands::version(),
+                commands::dry_run(),
             ],
+            on_error: |error| {
+                Box::pin(async move {
+                    if let FrameworkError::Command { error, ctx } = error {
+                        debug!("Notifying user of command error: {error:#}");
+                        if let Err(err) = ctx.say(format!("Error: {error:#}")).await {
+                            error!("Unable to send error due to {err:#}");
+                        }
+                    }
+                })
+            },
 
             ..Default::default()
         })
