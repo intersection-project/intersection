@@ -20,7 +20,7 @@ pub struct Resolver<'a> {
     pub member: &'a serenity::Member,
     /// The Context made available to the command
     pub ctx: &'a serenity::Context,
-    /// THe channel the query was originally sent in
+    /// `THe` channel the query was originally sent in
     pub channel: &'a serenity::GuildChannel,
 }
 #[async_trait]

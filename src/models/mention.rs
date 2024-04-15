@@ -3,7 +3,7 @@
 /// A mention like <@123> or @everyone
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum Mention {
-    /// Specifically mentioning a user: `<@ID>` or <@!ID>`
+    /// Specifically mentioning a user: `<@ID>` or `<@!ID>`
     User(poise::serenity_prelude::UserId),
     /// Mentioning in the form @everyone, @here, or `<&ID>`
     Role(RoleType),

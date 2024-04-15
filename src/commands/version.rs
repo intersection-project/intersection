@@ -20,6 +20,7 @@ fn crate_version(display_name: &str, crate_name: &str) -> String {
 
 /// See what version of Intersection and our dependencies we're running
 #[poise::command(slash_command)]
+#[allow(clippy::const_is_empty)]
 pub async fn version(ctx: Context<'_>) -> Result<(), anyhow::Error> {
     let dirty_str = if build_info::GIT_DIRTY.unwrap_or(false) {
         ", dirty source tree"

@@ -490,7 +490,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let _: Result<_, _> = dotenv();
 
     let filter = tracing_subscriber::EnvFilter::builder().parse(
-        std::env::var("RUST_LOG").unwrap_or_else(|_| "warn,intersection=info".to_string()),
+        env::var("RUST_LOG").unwrap_or_else(|_| "warn,intersection=info".to_string()),
     )?;
 
     // Note: We do not log spans by default, as they are very verbose.

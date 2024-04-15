@@ -28,6 +28,7 @@ pub trait InterpreterResolver<E> {
 /// Interpret a DRQL AST, deferring to the Resolver to resolve string literals, user IDs, and role IDs.
 #[async_recursion]
 #[instrument(skip_all, fields(node = %node))]
+#[allow(clippy::multiple_bound_locations)]
 pub async fn interpret<E: Send>(
     node: Expr,
     resolver: &mut (impl InterpreterResolver<E> + Send),
