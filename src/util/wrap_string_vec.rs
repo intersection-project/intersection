@@ -2,6 +2,7 @@ use anyhow::bail;
 
 /// Join a vector of strings with a separator, wrapping every time we would overflow the provided
 /// size.
+#[allow(clippy::assigning_clones)]
 pub fn wrap_string_vec(input: &Vec<String>, sep: &str, size: usize) -> anyhow::Result<Vec<String>> {
     let mut result = Vec::new();
     let mut current = String::new();

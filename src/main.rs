@@ -489,9 +489,8 @@ async fn main() -> Result<(), anyhow::Error> {
     #[allow(clippy::let_underscore_must_use, let_underscore_drop)]
     let _: Result<_, _> = dotenv();
 
-    let filter = tracing_subscriber::EnvFilter::builder().parse(
-        std::env::var("RUST_LOG").unwrap_or_else(|_| "warn,intersection=info".to_string()),
-    )?;
+    let filter = tracing_subscriber::EnvFilter::builder()
+        .parse(env::var("RUST_LOG").unwrap_or_else(|_| "warn,intersection=info".to_string()))?;
 
     // Note: We do not log spans by default, as they are very verbose.
     // To enable these, add the .with_span_events() call to the stdout_log layer.
