@@ -33,4 +33,4 @@ rand = "0.8.5"
 
 [build-dependencies]
 built = { version = "0.7.2", features = ["git2", "chrono", "dependency-tree"] }
-lalrpop = { version = "0.20.1", default-features = false }
+lalrpop = { version = "0.22.0", default-features = false }
